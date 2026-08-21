@@ -1,0 +1,23 @@
+# Core HTTP
+requests>=2.31
+
+# Official Open-Meteo client - lets us fetch all ~26 spots in ONE request
+# https://github.com/open-meteo/python-requests  (Apache-2.0)
+openmeteo-requests>=1.3
+
+# Local HTTP caching so repeat runs don't re-hit the free APIs
+# https://github.com/requests-cache/requests-cache  (BSD-2-Clause)
+requests-cache>=1.2
+
+# Offline US zip code -> lat/lon (GeoNames data, cached locally after first run)
+# https://github.com/symerio/pgeocode  (BSD-3-Clause)
+pgeocode>=0.4
+
+# Great-circle distance + Nominatim geocoding fallback
+# https://github.com/geopy/geopy  (MIT)
+geopy>=2.4
+
+# NOTE: `retry-requests` is deliberately NOT used, despite appearing in
+# Open-Meteo's own examples. It is GPLv3+ (copyleft); a 10-line retry helper
+# in conditions.py keeps this project permissively licensed. See
+# SECURITY-REVIEW.md.
