@@ -1,0 +1,300 @@
+<title>Florida swell distribution — the fl-surf-check baseline</title>
+<style>
+  :root{
+    color-scheme: light;
+    --ground:#fbfcfd; --surface:#ffffff; --ink:#0d1115; --ink-2:#3f4a56;
+    --muted:#68737f; --hair:#e3e8ed; --axis:#c2cad3; --rule:#eef2f6;
+    --series:#2a78d6; --series-soft:rgba(42,120,214,.10); --alt:#eb6834;
+    --mark:#68737f;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:where(:not([data-theme="light"])){
+      color-scheme: dark;
+      --ground:#131619; --surface:#1a1e22; --ink:#eef2f5; --ink-2:#b7c1cb;
+      --muted:#8d97a2; --hair:#272c32; --axis:#3a424a; --rule:#22272c;
+      --series:#3987e5; --series-soft:rgba(57,135,229,.14); --alt:#d95926;
+      --mark:#8d97a2;
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --ground:#131619; --surface:#1a1e22; --ink:#eef2f5; --ink-2:#b7c1cb;
+    --muted:#8d97a2; --hair:#272c32; --axis:#3a424a; --rule:#22272c;
+    --series:#3987e5; --series-soft:rgba(57,135,229,.14); --alt:#d95926;
+    --mark:#8d97a2;
+  }
+  :root[data-theme="light"]{
+    color-scheme: light;
+    --ground:#fbfcfd; --surface:#ffffff; --ink:#0d1115; --ink-2:#3f4a56;
+    --muted:#68737f; --hair:#e3e8ed; --axis:#c2cad3; --rule:#eef2f6;
+    --series:#2a78d6; --series-soft:rgba(42,120,214,.10); --alt:#eb6834;
+    --mark:#68737f;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:920px; margin:0 auto; padding:64px 24px 96px; display:flex; flex-direction:column; gap:56px}
+  .eyebrow{
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin:0 0 14px
+  }
+  h1{font-size:clamp(28px,4.2vw,40px); line-height:1.15; letter-spacing:-.021em; margin:0 0 16px; text-wrap:balance; font-weight:640}
+  h2{font-size:21px; letter-spacing:-.012em; margin:0 0 6px; font-weight:640; text-wrap:balance}
+  p{margin:0 0 14px; color:var(--ink-2); max-width:66ch}
+  p:last-child{margin-bottom:0}
+  .lede{font-size:17px; color:var(--ink-2); max-width:64ch}
+  strong{color:var(--ink); font-weight:620}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric:tabular-nums}
+
+  header{border-bottom:1px solid var(--hair); padding-bottom:36px}
+
+  .stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr)); gap:1px; background:var(--hair); border:1px solid var(--hair); border-radius:10px; overflow:hidden}
+  .stat{background:var(--surface); padding:16px 18px; display:flex; flex-direction:column; gap:3px}
+  .stat .v{font-size:25px; font-weight:640; letter-spacing:-.02em; line-height:1.15}
+  .stat .k{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted)}
+  .stat .sub{font-size:12px; color:var(--muted); line-height:1.4}
+
+  section{display:flex; flex-direction:column; gap:18px}
+  .fig{background:var(--surface); border:1px solid var(--hair); border-radius:12px; padding:22px 20px 14px}
+  .fig-scroll{overflow-x:auto}
+  svg{display:block; width:100%; height:auto; min-width:520px}
+  .cap{font-size:12.5px; color:var(--muted); margin:12px 2px 0; max-width:70ch}
+
+  .pair{display:grid; grid-template-columns:1fr 1fr; gap:18px}
+  @media (max-width:760px){ .pair{grid-template-columns:1fr} }
+  .pair .fig{padding:18px 16px 12px}
+  .fig h3{font-size:14px; margin:0 0 2px; font-weight:640; letter-spacing:-.005em}
+  .fig .note{font-size:12px; color:var(--muted); margin:0 0 12px}
+  .skewtag{display:inline-flex; align-items:center; gap:6px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; padding:2px 7px; border-radius:5px; border:1px solid var(--hair); color:var(--ink-2)}
+  .dot{width:7px;height:7px;border-radius:50%;flex:none}
+
+  table{border-collapse:collapse; width:100%; font-size:13.5px; min-width:460px}
+  .tablewrap{overflow-x:auto; border:1px solid var(--hair); border-radius:10px; background:var(--surface)}
+  th,td{text-align:right; padding:9px 14px; border-bottom:1px solid var(--rule)}
+  th:first-child,td:first-child{text-align:left}
+  thead th{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); font-weight:500}
+  tbody tr:last-child td{border-bottom:none}
+  td.num{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric:tabular-nums; color:var(--ink)}
+
+  .tip{position:fixed; pointer-events:none; opacity:0; transition:opacity .1s; background:var(--surface); color:var(--ink); border:1px solid var(--axis); border-radius:7px; padding:7px 10px; font-size:12px; box-shadow:0 4px 14px rgba(0,0,0,.13); z-index:9; white-space:nowrap}
+  .tip .t-v{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric:tabular-nums}
+  .tip .t-k{color:var(--muted); font-size:11px}
+  .bar{transition:fill-opacity .1s}
+  .bar:hover{fill-opacity:.72}
+  a{color:var(--series)}
+  :focus-visible{outline:2px solid var(--series); outline-offset:2px; border-radius:3px}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">fl-surf-check &middot; historical baseline</p>
+  <h1>What a normal Florida surf day actually looks like</h1>
+  <p class="lede">
+    Every rarity score in the tool is a position in this distribution: pooled daily-maximum
+    swell across all 26 spots, in the &plusmn;14-day window around late August, drawn from the
+    marine record that begins 1&nbsp;October&nbsp;2021.
+  </p>
+</header>
+
+<section>
+  <div class="stats">
+    <div class="stat"><span class="k">Samples</span><span class="v mono">3,380</span><span class="sub">spot-days, 26 spots</span></div>
+    <div class="stat"><span class="k">Evidence</span><span class="v mono">130</span><span class="sub">distinct days, 5 seasons</span></div>
+    <div class="stat"><span class="k">Median</span><span class="v mono">1.31<span style="font-size:15px">ft</span></span><span class="sub">the typical day</span></div>
+    <div class="stat"><span class="k">p90</span><span class="v mono">2.82<span style="font-size:15px">ft</span></span><span class="sub">a good day</span></div>
+    <div class="stat"><span class="k">Max</span><span class="v mono">7.41<span style="font-size:15px">ft</span></span><span class="sub">best in the record</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>Swell height</h2>
+  <p>
+    The shape is the whole story: a hard wall at the left, a long thin tail to the right.
+    Florida is small nearly all the time, and occasionally &mdash; when a tropical system lines
+    up &mdash; it very much isn't. Half of all days sit between roughly 0.9 and 1.9&nbsp;ft.
+  </p>
+  <div class="fig">
+    <div class="fig-scroll"><svg id="svg-height" viewBox="0 0 880 340" role="img"
+      aria-label="Histogram of pooled daily-maximum swell height across 26 Florida spots. Strongly right-skewed: mode near 1 foot, median 1.31 feet, long tail out to 7.41 feet."></svg></div>
+    <p class="cap">Hover any bar for its range and count. Dashed rules mark percentiles; these are the same numbers the tool reports as <span class="mono">VS&nbsp;NORM</span>.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Why the tool measures standard deviations in log space</h2>
+  <p>
+    That long tail breaks a plain standard deviation. On the raw values the mean lands at the
+    <strong>64th percentile</strong> rather than the 50th, and the biggest day in five years sits
+    at <strong>+5.9&nbsp;&sigma;</strong> &mdash; which, at 60 minutes of earned driving per &sigma;,
+    would have justified a six-hour trip. Taking logs first collapses the skew from
+    <strong>1.95 to 0.27</strong> and &sigma; recovers its textbook meaning.
+  </p>
+  <div class="pair">
+    <div class="fig">
+      <h3>Raw feet</h3>
+      <p class="note"><span class="skewtag"><span class="dot" style="background:var(--alt)"></span>skew 1.95</span></p>
+      <div class="fig-scroll"><svg id="svg-raw" viewBox="0 0 420 250" role="img" aria-label="Raw swell height distribution, strongly right-skewed, skew 1.95."></svg></div>
+    </div>
+    <div class="fig">
+      <h3>Log space</h3>
+      <p class="note"><span class="skewtag"><span class="dot" style="background:var(--series)"></span>skew 0.27</span></p>
+      <div class="fig-scroll"><svg id="svg-log" viewBox="0 0 420 250" role="img" aria-label="Log-transformed swell height distribution, close to symmetric, skew 0.27."></svg></div>
+    </div>
+  </div>
+  <p class="cap" style="margin-top:2px">
+    Same 3,380 observations, rebinned on a different horizontal scale. The right-hand axis is
+    log-spaced in feet; &sigma; gridlines mark the geometric mean (1.39&nbsp;ft) and &plusmn;1&sigma;.
+    The best day on record becomes a well-behaved +3.1&nbsp;&sigma;.
+  </p>
+</section>
+
+<section>
+  <h2>Swell period</h2>
+  <p>
+    Period is the better-behaved of the two &mdash; near-symmetric at skew 0.11, centred on
+    <strong>7.15&nbsp;s</strong>. It carries 30% of the quality score because it separates
+    organised groundswell from local wind chop.
+  </p>
+  <div class="fig">
+    <div class="fig-scroll"><svg id="svg-period" viewBox="0 0 880 280" role="img"
+      aria-label="Histogram of pooled daily-maximum swell period. Near-symmetric, median 7.15 seconds."></svg></div>
+  </div>
+</section>
+
+<section>
+  <h2>The numbers</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Percentile</th><th>Swell height</th><th>Swell period</th><th>Reads as</th></tr></thead>
+      <tbody>
+        <tr><td>p50</td><td class="num">1.31 ft</td><td class="num">7.15 s</td><td style="text-align:right;color:var(--muted)">a normal day</td></tr>
+        <tr><td>p75</td><td class="num">1.90 ft</td><td class="num">8.20 s</td><td style="text-align:right;color:var(--muted)">above normal</td></tr>
+        <tr><td>p90</td><td class="num">2.82 ft</td><td class="num">9.40 s</td><td style="text-align:right;color:var(--muted)">standout</td></tr>
+        <tr><td>p95</td><td class="num">3.67 ft</td><td class="num">10.40 s</td><td style="text-align:right;color:var(--muted)">rare</td></tr>
+        <tr><td>p99</td><td class="num">5.45 ft</td><td class="num">11.50 s</td><td style="text-align:right;color:var(--muted)">best in 5 years</td></tr>
+        <tr><td>max</td><td class="num">7.41 ft</td><td class="num">12.90 s</td><td style="text-align:right;color:var(--muted)">the whole record</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="cap">
+    Because the record reaches back only to October 2021, every percentile the tool reports is
+    shrunk toward normal in proportion to the evidence behind it &mdash; which is why a p99 reading
+    is displayed as p90, not p99.
+  </p>
+</section>
+
+</div>
+<div class="tip" id="tip"></div>
+<script>
+const DATA = {"n":3380,"n_days":130,"height":{"bins":[{"x0":0.0,"x1":0.25,"n":2},{"x0":0.25,"x1":0.5,"n":66},{"x0":0.5,"x1":0.75,"n":368},{"x0":0.75,"x1":1.0,"n":554},{"x0":1.0,"x1":1.25,"n":588},{"x0":1.25,"x1":1.5,"n":329},{"x0":1.5,"x1":1.75,"n":421},{"x0":1.75,"x1":2.0,"n":240},{"x0":2.0,"x1":2.25,"n":192},{"x0":2.25,"x1":2.5,"n":163},{"x0":2.5,"x1":2.75,"n":91},{"x0":2.75,"x1":3.0,"n":72},{"x0":3.0,"x1":3.25,"n":66},{"x0":3.25,"x1":3.5,"n":38},{"x0":3.5,"x1":3.75,"n":29},{"x0":3.75,"x1":4.0,"n":33},{"x0":4.0,"x1":4.25,"n":31},{"x0":4.25,"x1":4.5,"n":24},{"x0":4.5,"x1":4.75,"n":7},{"x0":4.75,"x1":5.0,"n":15},{"x0":5.0,"x1":5.25,"n":15},{"x0":5.25,"x1":5.5,"n":6},{"x0":5.5,"x1":5.75,"n":4},{"x0":5.75,"x1":6.0,"n":5},{"x0":6.0,"x1":6.25,"n":8},{"x0":6.25,"x1":6.5,"n":6},{"x0":6.5,"x1":6.75,"n":2},{"x0":6.75,"x1":7.0,"n":3},{"x0":7.0,"x1":7.25,"n":0},{"x0":7.25,"x1":7.5,"n":2},{"x0":7.5,"x1":7.75,"n":0},{"x0":7.75,"x1":8.0,"n":0}],"skew":1.95,"mean":1.61,"median":1.31,"p":{"50":1.31,"75":1.9,"90":2.82,"95":3.67,"99":5.45},"max":7.41},"logheight":{"bins":[{"x0":-1.5,"x1":-1.384,"n":0},{"x0":-1.384,"x1":-1.269,"n":2},{"x0":-1.269,"x1":-1.153,"n":0},{"x0":-1.153,"x1":-1.038,"n":7},{"x0":-1.038,"x1":-0.922,"n":11},{"x0":-0.922,"x1":-0.806,"n":0},{"x0":-0.806,"x1":-0.691,"n":46},{"x0":-0.691,"x1":-0.575,"n":21},{"x0":-0.575,"x1":-0.459,"n":64},{"x0":-0.459,"x1":-0.344,"n":85},{"x0":-0.344,"x1":-0.228,"n":285},{"x0":-0.228,"x1":-0.112,"n":248},{"x0":-0.112,"x1":0.003,"n":219},{"x0":0.003,"x1":0.119,"n":307},{"x0":0.119,"x1":0.234,"n":281},{"x0":0.234,"x1":0.35,"n":289},{"x0":0.35,"x1":0.466,"n":303},{"x0":0.466,"x1":0.581,"n":215},{"x0":0.581,"x1":0.697,"n":183},{"x0":0.697,"x1":0.812,"n":192},{"x0":0.812,"x1":0.928,"n":163},{"x0":0.928,"x1":1.044,"n":124},{"x0":1.044,"x1":1.159,"n":88},{"x0":1.159,"x1":1.275,"n":59},{"x0":1.275,"x1":1.391,"n":66},{"x0":1.391,"x1":1.506,"n":47},{"x0":1.506,"x1":1.622,"n":25},{"x0":1.622,"x1":1.737,"n":20},{"x0":1.737,"x1":1.853,"n":20},{"x0":1.853,"x1":1.969,"n":6},{"x0":1.969,"x1":2.084,"n":2},{"x0":2.084,"x1":2.2,"n":0}],"skew":0.27,"mean":0.327,"sd":0.537},"period":{"bins":[{"x0":2.0,"x1":2.5,"n":0},{"x0":2.5,"x1":3.0,"n":1},{"x0":3.0,"x1":3.5,"n":26},{"x0":3.5,"x1":4.0,"n":137},{"x0":4.0,"x1":4.5,"n":131},{"x0":4.5,"x1":5.0,"n":118},{"x0":5.0,"x1":5.5,"n":161},{"x0":5.5,"x1":6.0,"n":244},{"x0":6.0,"x1":6.5,"n":294},{"x0":6.5,"x1":7.0,"n":390},{"x0":7.0,"x1":7.5,"n":443},{"x0":7.5,"x1":8.0,"n":425},{"x0":8.0,"x1":8.5,"n":339},{"x0":8.5,"x1":9.0,"n":233},{"x0":9.0,"x1":9.5,"n":120},{"x0":9.5,"x1":10.0,"n":86},{"x0":10.0,"x1":10.5,"n":95},{"x0":10.5,"x1":11.0,"n":65},{"x0":11.0,"x1":11.5,"n":36},{"x0":11.5,"x1":12.0,"n":24},{"x0":12.0,"x1":12.5,"n":8},{"x0":12.5,"x1":13.0,"n":4},{"x0":13.0,"x1":13.5,"n":0},{"x0":13.5,"x1":14.0,"n":0},{"x0":14.0,"x1":14.5,"n":0},{"x0":14.5,"x1":15.0,"n":0},{"x0":15.0,"x1":15.5,"n":0},{"x0":15.5,"x1":16.0,"n":0}],"skew":0.11,"median":7.15,"p":{"50":7.15,"90":9.4,"99":11.5}}}
+;
+const NS='http://www.w3.org/2000/svg';
+const el=(n,a={})=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const tip=document.getElementById('tip');
+function showTip(html,ev){tip.innerHTML=html;tip.style.opacity='1';moveTip(ev);}
+function moveTip(ev){const r=tip.getBoundingClientRect();let x=ev.clientX+14,y=ev.clientY-r.height-10;
+  if(x+r.width>innerWidth-8)x=ev.clientX-r.width-14; if(y<8)y=ev.clientY+16;
+  tip.style.left=x+'px';tip.style.top=y+'px';}
+function hideTip(){tip.style.opacity='0';}
+
+// One histogram renderer. `opts.xLabel` formats a bin edge for the axis and tooltip.
+function histogram(svgId,bins,opts){
+  const svg=document.getElementById(svgId); svg.innerHTML='';
+  const vb=svg.getAttribute('viewBox').split(' ').map(Number);
+  const W=vb[2],H=vb[3];
+  const m=opts.margin||{t:16,r:16,b:38,l:46};
+  const pw=W-m.l-m.r, ph=H-m.t-m.b;
+  const x0=bins[0].x0, x1=bins[bins.length-1].x1;
+  const maxN=Math.max(...bins.map(b=>b.n));
+  // Round the count axis up to a clean step so gridlines land on readable numbers.
+  const step=Math.pow(10,Math.floor(Math.log10(maxN)))*(maxN/Math.pow(10,Math.floor(Math.log10(maxN)))>5?2:1);
+  const top=Math.ceil(maxN/step)*step;
+  const X=v=>m.l+(v-x0)/(x1-x0)*pw;
+  const Y=n=>m.t+ph-(n/top)*ph;
+
+  // gridlines: solid hairlines, one step off surface, recessive
+  const ticks=[];for(let v=0;v<=top;v+=step)ticks.push(v);
+  ticks.forEach(v=>{
+    svg.appendChild(el('line',{x1:m.l,x2:m.l+pw,y1:Y(v),y2:Y(v),stroke:'var(--rule)','stroke-width':1}));
+    svg.appendChild(el('text',{x:m.l-9,y:Y(v)+3.5,'text-anchor':'end',fill:'var(--muted)','font-size':10.5,
+      'font-family':'ui-monospace,Menlo,monospace'})).textContent=v.toLocaleString();
+  });
+  svg.appendChild(el('line',{x1:m.l,x2:m.l+pw,y1:Y(0),y2:Y(0),stroke:'var(--axis)','stroke-width':1}));
+
+  // bars — 2px surface gap between neighbours, small rounded data-end
+  bins.forEach(b=>{
+    const bx=X(b.x0), bw=Math.max(1,X(b.x1)-X(b.x0)-2);
+    if(b.n===0)return;
+    const h=Y(0)-Y(b.n), r=Math.min(3,bw/2,h);
+    const p=el('path',{d:`M${bx} ${Y(0)}L${bx} ${Y(b.n)+r}Q${bx} ${Y(b.n)} ${bx+r} ${Y(b.n)}L${bx+bw-r} ${Y(b.n)}Q${bx+bw} ${Y(b.n)} ${bx+bw} ${Y(b.n)+r}L${bx+bw} ${Y(0)}Z`,
+      fill:'var(--series)','fill-opacity':.92,class:'bar'});
+    p.addEventListener('mouseenter',e=>showTip(
+      `<div class="t-v">${opts.fmt(b.x0)} – ${opts.fmt(b.x1)}</div><div class="t-k">${b.n.toLocaleString()} of 3,380 · ${(100*b.n/3380).toFixed(1)}%</div>`,e));
+    p.addEventListener('mousemove',moveTip); p.addEventListener('mouseleave',hideTip);
+    svg.appendChild(p);
+  });
+
+  // x ticks
+  (opts.xticks||[]).forEach(t=>{
+    svg.appendChild(el('text',{x:X(t.v),y:m.t+ph+17,'text-anchor':'middle',fill:'var(--muted)','font-size':10.5,
+      'font-family':'ui-monospace,Menlo,monospace'})).textContent=t.label;
+  });
+  if(opts.xTitle) svg.appendChild(el('text',{x:m.l+pw/2,y:H-4,'text-anchor':'middle',fill:'var(--muted)','font-size':11})).textContent=opts.xTitle;
+  if(opts.yTitle) svg.appendChild(el('text',{x:12,y:m.t+ph/2,'text-anchor':'middle',fill:'var(--muted)','font-size':11,
+    transform:`rotate(-90 12 ${m.t+ph/2})`})).textContent=opts.yTitle;
+
+  // annotation rules (percentiles etc) — dashed to read as thresholds, not grid
+  (opts.marks||[]).forEach(mk=>{
+    const mx=X(mk.v); if(mx<m.l||mx>m.l+pw)return;
+    svg.appendChild(el('line',{x1:mx,x2:mx,y1:m.t,y2:Y(0),stroke:mk.color||'var(--mark)','stroke-width':1.25,
+      'stroke-dasharray':'3 3','stroke-opacity':.85}));
+    const t=el('text',{x:mx+(mk.flip?-5:5),y:m.t+(mk.dy||11),'text-anchor':mk.flip?'end':'start',
+      fill:mk.color||'var(--ink-2)','font-size':10.5,'font-weight':600,'font-family':'ui-monospace,Menlo,monospace'});
+    t.textContent=mk.label; svg.appendChild(t);
+  });
+}
+
+const ft=v=>v.toFixed(2)+' ft';
+histogram('svg-height',DATA.height.bins,{
+  fmt:ft, xTitle:'daily-maximum swell height (ft)', yTitle:'days',
+  margin:{t:20,r:18,b:40,l:52},
+  xticks:[0,1,2,3,4,5,6,7,8].map(v=>({v,label:String(v)})),
+  marks:[
+    {v:1.31,label:'p50 1.31',dy:12},
+    {v:2.82,label:'p90 2.82',dy:28},
+    {v:3.67,label:'p95 3.67',dy:44},
+    {v:5.45,label:'p99 5.45',dy:60},
+    {v:7.41,label:'max 7.41',dy:76,flip:true}
+  ]
+});
+
+histogram('svg-period',DATA.period.bins,{
+  fmt:v=>v.toFixed(1)+' s', xTitle:'daily-maximum swell period (s)', yTitle:'days',
+  margin:{t:18,r:18,b:40,l:52},
+  xticks:[2,4,6,8,10,12,14,16].map(v=>({v,label:String(v)})),
+  marks:[{v:7.15,label:'p50 7.15',dy:12},{v:9.40,label:'p90 9.4',dy:28},{v:11.5,label:'p99 11.5',dy:44}]
+});
+
+// the pair: identical data, different horizontal scale
+histogram('svg-raw',DATA.height.bins,{
+  fmt:ft, xTitle:'feet', margin:{t:14,r:12,b:36,l:38},
+  xticks:[0,2,4,6,8].map(v=>({v,label:String(v)})),
+  marks:[{v:DATA.height.mean,label:'mean',dy:11,color:'var(--alt)'}]
+});
+const LM=DATA.logheight.mean, LS=DATA.logheight.sd;
+histogram('svg-log',DATA.logheight.bins,{
+  fmt:v=>Math.exp(v).toFixed(2)+' ft', xTitle:'feet, log-spaced', margin:{t:14,r:12,b:36,l:38},
+  xticks:[0.5,1,2,4,8].map(v=>({v:Math.log(v),label:String(v)})),
+  marks:[
+    {v:LM-LS,label:'\u22121\u03c3',dy:11,flip:true},
+    {v:LM,label:'mean',dy:11,color:'var(--series)'},
+    {v:LM+LS,label:'+1\u03c3',dy:11}
+  ]
+});
+</script>

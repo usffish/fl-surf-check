@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import datetime as dt
 from dataclasses import dataclass
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -42,11 +43,34 @@ CACHE_SECONDS = 1800  # 30 min - surf data doesn't change faster than this
 @dataclass
 class Conditions:
     """Current conditions at one spot. Any field may be None if unavailable."""
-    wave_height_ft: float | None = None
+    wave_height_ft: float | None = None      # TOTAL sea state (swell + wind chop)
     wave_period_s: float | None = None
     wave_direction_deg: float | None = None
+    # The SWELL partition on its own, with local wind chop removed. This is the
+    # rideable groundswell, and it is what the historical baselines in
+    # climatology.py are built from - so rarity must be judged on these, not on
+    # the total. Validated against the NWS coastal waters forecast: Open-Meteo
+    # reported swell 1.12ft @ 7.9s from 90deg where NWS said "east 1 foot at
+    # 9 seconds", while the total sea state read 1.31ft @ 7.25s because it had
+    # 0.66ft of 1.7s sea-breeze chop mixed in.
+    swell_height_ft: float | None = None
+    swell_period_s: float | None = None
+    swell_direction_deg: float | None = None
     wind_speed_mph: float | None = None
     wind_direction_deg: float | None = None
+    # Thunderstorm risk. Rain is fine to surf in; lightning is not, so this is
+    # tracked separately from wave quality rather than folded into the score.
+    #
+    # NOTE this is forecast-only. The ERA5 archive that backs the historical
+    # baseline never emits thunderstorm weather codes at all (measured: zero
+    # occurrences of 95/96/99 across 1.1M hours in the most thunderstorm-prone
+    # state in the US), because convection is sub-grid at ~25km and gets
+    # parameterised into ordinary rain. CAPE is likewise all-NaN in the archive
+    # while being available in the forecast. See climatology for why filtering
+    # history for storms is neither possible nor necessary.
+    weather_code: float | None = None
+    cape_j_kg: float | None = None          # convective available potential energy
+    precip_probability: float | None = None  # percent
     tide_state: str | None = None          # "rising", "falling", or None
     next_tide: str | None = None           # e.g. "H 14:32"
     errors: tuple[str, ...] = ()
@@ -113,7 +137,10 @@ def fetch_marine_and_wind(spots) -> dict[str, Conditions]:
                 params={
                     "latitude": lats,
                     "longitude": lons,
-                    "hourly": ["wave_height", "wave_period", "wave_direction"],
+                    "hourly": [
+                        "wave_height", "wave_period", "wave_direction",
+                        "swell_wave_height", "swell_wave_period", "swell_wave_direction",
+                    ],
                     "length_unit": "imperial",
                     "timezone": "UTC",
                     "forecast_days": 1,
@@ -126,9 +153,12 @@ def fetch_marine_and_wind(spots) -> dict[str, Conditions]:
             c.wave_height_ft = _values_at_current_hour(hourly, 0)
             c.wave_period_s = _values_at_current_hour(hourly, 1)
             c.wave_direction_deg = _values_at_current_hour(hourly, 2)
+            c.swell_height_ft = _values_at_current_hour(hourly, 3)
+            c.swell_period_s = _values_at_current_hour(hourly, 4)
+            c.swell_direction_deg = _values_at_current_hour(hourly, 5)
     except Exception as exc:
         for c in results.values():
-            c.errors = c.errors + (f"wave data unavailable: {type(exc).__name__}",)
+            c.errors = c.errors + (f"wave data unavailable: {_describe(exc)}",)
 
     # --- Wind (one request, all spots) ---
     try:
@@ -138,7 +168,10 @@ def fetch_marine_and_wind(spots) -> dict[str, Conditions]:
                 params={
                     "latitude": lats,
                     "longitude": lons,
-                    "hourly": ["wind_speed_10m", "wind_direction_10m"],
+                    "hourly": [
+                        "wind_speed_10m", "wind_direction_10m",
+                        "weather_code", "cape", "precipitation_probability",
+                    ],
                     "wind_speed_unit": "mph",
                     "timezone": "UTC",
                     "forecast_days": 1,
@@ -150,15 +183,33 @@ def fetch_marine_and_wind(spots) -> dict[str, Conditions]:
             c = results[spot.name]
             c.wind_speed_mph = _values_at_current_hour(hourly, 0)
             c.wind_direction_deg = _values_at_current_hour(hourly, 1)
+            c.weather_code = _values_at_current_hour(hourly, 2)
+            c.cape_j_kg = _values_at_current_hour(hourly, 3)
+            c.precip_probability = _values_at_current_hour(hourly, 4)
     except Exception as exc:
         for c in results.values():
-            c.errors = c.errors + (f"wind data unavailable: {type(exc).__name__}",)
+            c.errors = c.errors + (f"wind data unavailable: {_describe(exc)}",)
 
     return results
 
 
+def _is_rate_limit(exc: Exception) -> bool:
+    """True if this exception is Open-Meteo telling us to slow down."""
+    return "limit exceeded" in str(exc).lower() or "rate limit" in str(exc).lower()
+
+
 def _with_retry(fn, attempts: int = 3, backoff: float = 0.5):
-    """Tiny retry helper (see the licensing note in _build_client)."""
+    """
+    Tiny retry helper (see the licensing note in _build_client).
+
+    Rate-limit errors are deliberately NOT retried. Open-Meteo's limit is
+    per-MINUTE, so the sub-second backoff here would never outlast it, and each
+    extra attempt spends more of the quota we are already out of. Failing fast
+    lets the caller surface an accurate message instead of stalling and then
+    reporting a generic error. This is reachable in normal use: a
+    --refresh-history run pulls ~1.1M samples and can leave the very next
+    invocation rate-limited.
+    """
     import time
 
     last = None
@@ -167,18 +218,41 @@ def _with_retry(fn, attempts: int = 3, backoff: float = 0.5):
             return fn()
         except Exception as exc:
             last = exc
+            if _is_rate_limit(exc):
+                raise
             if i < attempts - 1:
                 time.sleep(backoff * (2 ** i))
     raise last
 
 
-def fetch_tide(station_id: str, session: requests.Session | None = None) -> tuple[str | None, str | None]:
+def _describe(exc: Exception) -> str:
+    """Short, actionable reason for a failed fetch."""
+    if _is_rate_limit(exc):
+        return "Open-Meteo rate limit hit - wait a minute and retry"
+    return type(exc).__name__
+
+
+def fetch_tide(
+    station_id: str,
+    tz: str = "America/New_York",
+    session: requests.Session | None = None,
+) -> tuple[str | None, str | None]:
     """
     Get (tide_state, next_tide_label) for a NOAA station.
 
     tide_state is "rising" or "falling" based on whether the next predicted
     extreme is a high or a low. Returns (None, None) on any failure - tide is
     a minor scoring input, so it degrades gracefully.
+
+    `tz` must be the IANA timezone of the station (Spot.tz). We request
+    time_zone=lst_ldt, so NOAA returns timestamps in the STATION's local time.
+    Comparing those against a bare datetime.now() - the machine's local time -
+    is only correct when the machine happens to share the station's timezone.
+    The three Panhandle stations are US/Central while the machine (and every
+    other station) is typically US/Eastern, so that comparison ran one hour
+    fast there and could skip a tide that was imminent. Observed live: a Low
+    18:02 Central was skipped in favour of the following High at 07:07 the
+    next morning, which also inverted tide_state from falling to rising.
     """
     getter = session.get if session is not None else requests.get
     now = dt.datetime.now(dt.timezone.utc)
@@ -202,7 +276,7 @@ def fetch_tide(station_id: str, session: requests.Session | None = None) -> tupl
     except (requests.RequestException, ValueError, AttributeError):
         return None, None
 
-    local_now = dt.datetime.now()
+    local_now = dt.datetime.now(ZoneInfo(tz)).replace(tzinfo=None)
     for p in predictions:
         try:
             when = dt.datetime.strptime(p["t"], "%Y-%m-%d %H:%M")

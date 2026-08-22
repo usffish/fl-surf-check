@@ -303,3 +303,354 @@ def _verdict(surf_score: float, distance_miles: float) -> str:
     if distance_miles > 200:
         return "Epic - but that's a road trip"
     return "GO. Drop everything"
+
+
+# ---------------------------------------------------------------------------
+# Rarity: is this unusually good FOR THIS SPOT, right now?
+# ---------------------------------------------------------------------------
+#
+# Everything above scores conditions on an absolute scale. That answers "is
+# this rideable?" but not "is this a day worth clearing my calendar for?" -
+# which depends entirely on what the spot normally does. Flagler in August is
+# a different question from Sebastian Inlet in February.
+#
+# The approach is lifted from the movie-score engine's composite, with one
+# deliberate substitution:
+#
+#   min-max normalisation  ->  PERCENTILE RANK
+#
+# The batch-wide framing carries over unchanged. The movie engine computes min
+# and max "across the entire batch ... not per-movie"; here the distribution is
+# pooled across ALL Florida spots rather than built per-spot. Grading each break
+# on its own curve would flatter the weak ones - a mediocre Pensacola day would
+# read the same "p90" as a genuinely excellent Sebastian Inlet day. One shared
+# yardstick keeps better spots reading as better, which is the entire point when
+# you are choosing where to drive.
+#
+# Min-max is the right call when the population is bounded and roughly even
+# (Metascores land across 0-100). Surf is neither: it is heavily right-skewed
+# by rare storm events. Measured over the 5-year record, min-max maps a median
+# day at Fernandina to 0.17 and even a strong p90 day to only 0.38, because a
+# single 7.9ft hurricane swell owns the top of the range. Every ordinary day
+# bunches into the bottom fifth of the scale and the signal is lost.
+#
+# Percentile rank asks the same question - "where does this sit in the observed
+# population?" - but spreads the answer evenly across 0-1 by construction, and
+# is immune to how extreme the extremes are.
+#
+# The evidence-weighting carries over directly. The movie engine distrusts a
+# 100% score from 10 reviews via Laplace's rule of succession, (p+1)/(n+2).
+# The same reasoning applies here with even more force: the marine record only
+# starts in 2021-10, so a "top 2% day!" claim may rest on ~5 seasons. Rather
+# than let a thin sample shout, the percentile is shrunk toward the median in
+# proportion to how little evidence stands behind it.
+
+# Rarity labels are expressed as a fraction of the HIGHEST percentile the
+# shrinkage can actually produce, not as absolute percentiles.
+#
+# This matters because shrinkage imposes a ceiling. With the current baseline
+# (n=130 days) even a once-in-5-years 7.4ft swell shrinks to p91, so fixed
+# cutoffs at p93 or p97 would be unreachable dead code - the same trap as a
+# verdict threshold no real input can cross. Scaling to the attainable range
+# keeps every label reachable at any n, and keeps their meaning stable as the
+# record grows: "as close to the top as this much evidence can support".
+RARITY_STANDOUT = 0.75   # >= 75% of the way from normal to the attainable max
+RARITY_RARE = 0.85
+RARITY_TOP = 0.95
+
+# Laplace-style prior strength, in "virtual days". A baseline built from this
+# many real days carries half the weight of its raw percentile; far fewer and
+# it is pulled hard toward the median. ~30 is a season's worth of observations.
+RARITY_PRIOR_DAYS = 30.0
+
+
+def shrink_percentile(percentile: float, n_days: int, prior_days: float = RARITY_PRIOR_DAYS) -> float:
+    """
+    Pull a percentile toward the median (50) according to how much data backs it.
+
+    This is Laplace's rule of succession generalised from a proportion to a
+    percentile: the prior is "this was a perfectly ordinary day" (50th) and it
+    carries the weight of `prior_days` virtual observations.
+
+        shrunk = (percentile * n + 50 * prior) / (n + prior)
+
+    With a full seasonal baseline (n ~ 145) a 98th-percentile reading barely
+    moves, to ~90. With only 8 days of history behind it, that same reading
+    lands near 60 - visible, but not shouted about. That is the intended
+    behaviour: the record only reaches back to late 2021, and a rarity claim
+    should never outrun its evidence.
+    """
+    if n_days <= 0:
+        return 50.0
+    return (percentile * n_days + 50.0 * prior_days) / (n_days + prior_days)
+
+
+@dataclass
+class RarityScore:
+    """How unusual today's swell is against the statewide seasonal record."""
+    percentile: float | None       # 0-100 after shrinkage, None without a baseline
+    height_percentile: float | None
+    period_percentile: float | None
+    n_days: int
+    n_years: int
+    baseline_summary: str = ""
+    #: Geometric standard deviations above normal. Drives the extra drive-time
+    #: allowance; see drive_allowance_minutes.
+    sigma: float | None = None
+
+    @property
+    def relative(self) -> float | None:
+        """
+        How far this day reaches toward the best score the evidence can support.
+
+        0.0 is a perfectly normal day (p50), 1.0 is the ceiling that shrinkage
+        allows given `n_days`. Comparing against the ceiling rather than a raw
+        100 is what keeps the labels reachable - see the note on RARITY_*.
+        """
+        if self.percentile is None or self.n_days <= 0:
+            return None
+        ceiling = shrink_percentile(100.0, self.n_days)
+        if ceiling <= 50.0:
+            return None
+        return (self.percentile - 50.0) / (ceiling - 50.0)
+
+    @property
+    def is_standout(self) -> bool:
+        rel = self.relative
+        return rel is not None and rel >= RARITY_STANDOUT
+
+    def label(self) -> str:
+        """Short human phrase for how rare this is, or '' when unremarkable."""
+        rel = self.relative
+        if rel is None:
+            return ""
+        if rel >= RARITY_TOP:
+            return f"BEST IN {self.n_years}YR"
+        if rel >= RARITY_RARE:
+            return "RARE"
+        if rel >= RARITY_STANDOUT:
+            return "STANDOUT"
+        if rel >= 0.45:
+            return "above normal"
+        if rel <= -0.60:
+            return "below normal"
+        return ""
+
+
+def _combine_weighted(*pairs) -> float | None:
+    """
+    Weighted mean over (value, weight) pairs, skipping missing values.
+
+    Same dynamic-denominator rule used throughout: a None drops out of both
+    numerator and denominator instead of being counted as zero.
+    """
+    num = 0.0
+    den = 0.0
+    for value, weight in pairs:
+        if value is not None:
+            num += value * weight
+            den += weight
+    return None if den == 0 else num / den
+
+
+def rarity_score(conditions, baseline) -> RarityScore:
+    """
+    Score how unusual today's swell is against the Florida-wide baseline.
+
+    Height and period are ranked separately against the pooled statewide
+    distribution, then combined, weighted the same way they are in the absolute
+    score (0.35 : 0.30, renormalised) so the two views of the day stay
+    consistent with each other.
+
+    Follows the movie engine's dynamic-denominator rule: a missing signal is
+    dropped from both numerator and denominator rather than zero-filled, so a
+    spot is never penalised for data it simply does not have.
+    """
+    if baseline is None:
+        return RarityScore(None, None, None, 0, 0)
+
+    sigma = _combine_weighted(
+        (baseline.height_sigma(conditions.swell_height_ft), WEIGHTS["height"]),
+        (baseline.period_sigma(conditions.swell_period_s), WEIGHTS["period"]),
+    )
+
+    ph = baseline.height_percentile(conditions.swell_height_ft)
+    pp = baseline.period_percentile(conditions.swell_period_s)
+
+    numerator = 0.0
+    denominator = 0.0
+    if ph is not None:
+        numerator += ph * WEIGHTS["height"]
+        denominator += WEIGHTS["height"]
+    if pp is not None:
+        numerator += pp * WEIGHTS["period"]
+        denominator += WEIGHTS["period"]
+
+    if denominator == 0:
+        return RarityScore(None, ph, pp, baseline.n_days, baseline.n_years,
+                           baseline.summary(), sigma)
+
+    combined = shrink_percentile(numerator / denominator, baseline.n_days)
+    return RarityScore(
+        percentile=combined,
+        height_percentile=ph,
+        period_percentile=pp,
+        n_days=baseline.n_days,
+        n_years=baseline.n_years,
+        baseline_summary=baseline.summary(),
+        sigma=sigma,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Earning drive time with exceptional conditions
+# ---------------------------------------------------------------------------
+#
+# `closeness_factor` decays willingness to travel against a fixed `decay_miles`,
+# which is the same on a flat Tuesday as on the best swell of the year. But a
+# surfer's tolerance for driving is not fixed - it stretches with how good the
+# day is. The rule here makes that explicit and tunable:
+#
+#     every 1 standard deviation above normal buys 60 more minutes of driving
+#
+# "Standard deviation" is GEOMETRIC (computed on log values). Raw swell height
+# is strongly right-skewed - measured skew 1.95 on the pooled record - so a raw
+# z-score misbehaves: its mean sits at the 64th percentile, and the largest day
+# in five years lands at z+5.9, which would buy an absurd six extra hours. In
+# log space the skew falls to 0.27 and z recovers its textbook meaning:
+# +1 SD = p84.8, +2 SD = p96.4, +3 SD = p99.9. The best day on record is a
+# well-behaved +3.1 SD, worth about three extra hours.
+#
+# The sigma is shrunk by the same evidence weighting the rarity percentile uses.
+# A thin baseline cannot be allowed to send anyone on a four-hour drive.
+
+#: Extra driving time earned per geometric standard deviation above normal.
+MINUTES_PER_SIGMA = 60.0
+
+#: Ceiling on earned time, so a freak reading can never justify an absurd trip.
+MAX_ALLOWANCE_MINUTES = 240.0
+
+
+def drive_allowance_minutes(
+    sigma: float | None,
+    n_days: int = 0,
+    minutes_per_sigma: float = MINUTES_PER_SIGMA,
+    prior_days: float = RARITY_PRIOR_DAYS,
+    cap: float = MAX_ALLOWANCE_MINUTES,
+) -> float:
+    """
+    Extra minutes of driving justified by conditions this far above normal.
+
+    Only days *better* than normal earn anything; a below-average day does not
+    incur a penalty, because the plain drive time is already the honest cost.
+
+    The sigma is damped by n/(n + prior) - the same Laplace-style weighting
+    applied to the rarity percentile - so a baseline built from very few days
+    cannot talk anyone into a long drive on weak evidence.
+    """
+    if sigma is None or sigma <= 0.0:
+        return 0.0
+    confidence = 1.0 if n_days <= 0 else n_days / (n_days + prior_days)
+    return min(cap, sigma * minutes_per_sigma * confidence)
+
+
+def effective_drive(
+    distance_miles: float,
+    duration_minutes: float,
+    allowance_minutes: float,
+) -> tuple[float, float]:
+    """
+    Discount a real drive by the time exceptional conditions have earned.
+
+    Returns (effective_miles, effective_minutes). A 2-hour drive on a day that
+    has earned 60 minutes is scored as though it were a 1-hour drive, so it
+    competes with genuinely local options.
+
+    Miles are scaled by the same fraction as minutes rather than being
+    discounted independently, which preserves each route's own average speed -
+    an hour of interstate and an hour of surface streets cover very different
+    ground, and the mileage-based decay downstream should see that difference.
+    """
+    if allowance_minutes <= 0.0 or duration_minutes <= 0.0:
+        return distance_miles, duration_minutes
+    remaining = max(0.0, duration_minutes - allowance_minutes)
+    fraction = remaining / duration_minutes
+    return distance_miles * fraction, remaining
+
+
+# ---------------------------------------------------------------------------
+# Thunderstorms
+# ---------------------------------------------------------------------------
+#
+# Rain does not stop anyone surfing. Lightning does - and a surfer is the tallest
+# conductive object on a flat wet plain, which is why Florida leads the country
+# in lightning fatalities. So storm risk is deliberately NOT folded into the
+# 0-10 quality score: a perfect 8ft swell with a squall line overhead is not
+# "slightly worse surf", it is surf you must not paddle out into. It is reported
+# as a separate gate, the same way `confidence` reports data quality.
+#
+# This is forecast-only, and that asymmetry is measured rather than assumed:
+# the ERA5 archive behind the historical baseline emits ZERO thunderstorm codes
+# across 1.1M hours of Florida record, because ~25km reanalysis parameterises
+# convection away into ordinary rain. Filtering history for storms is therefore
+# impossible with that source - and, separately, unnecessary: the baseline is
+# built from daily maxima, and excluding storm hours moves its percentiles by
+# 0.00%, because a 1-3 hour afternoon storm almost never coincides with the
+# day's peak swell.
+
+#: WMO codes that mean a thunderstorm is happening right now.
+THUNDERSTORM_CODES = frozenset({95, 96, 99})
+
+#: CAPE (J/kg) above which the atmosphere can support thunderstorms at all.
+CAPE_MARGINAL = 1000.0
+#: CAPE indicating strong instability - storms likely, and likely severe.
+CAPE_STRONG = 2500.0
+
+
+def storm_risk(conditions) -> str:
+    """
+    Classify thunderstorm risk as "active", "likely", "possible" or "none".
+
+    "active" comes straight from the observed weather code. The other two blend
+    instability (CAPE) with how likely precipitation is: high CAPE on a dry day
+    is a loaded gun with no trigger, so neither alone is enough.
+
+    Returns "unknown" when the forecast fields are missing, so callers can tell
+    "no storm" apart from "no data".
+    """
+    code = conditions.weather_code
+    cape = conditions.cape_j_kg
+    pop = conditions.precip_probability
+
+    if code is not None and int(code) in THUNDERSTORM_CODES:
+        return "active"
+
+    if cape is None:
+        return "unknown" if code is None else "none"
+
+    chance = pop if pop is not None else 0.0
+    if cape >= CAPE_STRONG and chance >= 40.0:
+        return "likely"
+    if cape >= CAPE_MARGINAL and chance >= 50.0:
+        return "possible"
+    return "none"
+
+
+def storm_warning(risk: str) -> str:
+    """Short human phrase for a storm risk level, or '' when there is nothing to say."""
+    return {
+        "active": "THUNDERSTORM - do not paddle out",
+        "likely": "thunderstorms likely",
+        "possible": "thunderstorms possible",
+    }.get(risk, "")
+
+
+def storm_blocks_travel(risk: str) -> bool:
+    """
+    True when conditions should not earn extra drive time.
+
+    Exceptional surf normally buys extra driving (see drive_allowance_minutes),
+    but that logic must not talk anyone into a three-hour drive toward a
+    lightning storm. An active or likely storm forfeits the allowance entirely.
+    """
+    return risk in ("active", "likely")

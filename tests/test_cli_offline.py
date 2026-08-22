@@ -5,15 +5,19 @@ This exercises the real ranking, filtering and rendering code paths without
 touching Open-Meteo, NOAA or OSRM - so it runs in CI, offline, and instantly.
 """
 
+import datetime as dt
 import random
 from unittest import mock
+from zoneinfo import ZoneInfo
 
 import pytest
 
-from fl_surf_check import cli
+from fl_surf_check import cli, conditions
 from fl_surf_check.conditions import Conditions
 from fl_surf_check.distance import DriveEstimate, straight_line_miles
+from fl_surf_check.climatology import Baseline
 from fl_surf_check.location import Origin
+from fl_surf_check.spots import SPOTS
 
 ORIGIN = Origin(29.2108, -81.0228, "Daytona Beach, FL 32118", "pgeocode")
 
@@ -32,8 +36,20 @@ def _fake_marine(spots):
     }
 
 
-def _fake_tide(station, session=None):
+def _fake_tide(station, tz="America/New_York", session=None):
     return "rising", "High 14:32"
+
+
+def _fake_baseline(spots, **kwargs):
+    """One deterministic statewide baseline; never touches the network."""
+    return Baseline(
+        height_p=tuple(0.2 + 0.06 * q for q in Baseline.LEVELS),   # 0.2ft -> 6.2ft
+        period_p=tuple(3.0 + 0.09 * q for q in Baseline.LEVELS),   # 3s -> 12s
+        n_days=145,
+        n_years=5,
+        n_observations=145 * 26,
+        n_spots=26,
+    )
 
 
 def _fake_drive(olat, olon, dlat, dlon, timeout=8.0, session=None):
@@ -46,6 +62,7 @@ def offline():
     with mock.patch.object(cli, "fetch_marine_and_wind", _fake_marine), \
          mock.patch.object(cli, "fetch_tide", _fake_tide), \
          mock.patch.object(cli, "get_drive_estimate", _fake_drive), \
+         mock.patch.object(cli, "load_baseline", _fake_baseline), \
          mock.patch.object(cli, "geocode_zip", lambda z: ORIGIN):
         yield
 
@@ -108,8 +125,68 @@ def test_missing_data_does_not_crash(capsys):
     """Every API can fail; the CLI must still produce output."""
     empty = lambda spots: {s.name: Conditions(errors=("all sources down",)) for s in spots}
     with mock.patch.object(cli, "fetch_marine_and_wind", empty), \
-         mock.patch.object(cli, "fetch_tide", lambda st, session=None: (None, None)), \
+         mock.patch.object(cli, "fetch_tide", lambda st, tz="America/New_York", session=None: (None, None)), \
          mock.patch.object(cli, "get_drive_estimate", _fake_drive), \
+         mock.patch.object(cli, "load_baseline", _fake_baseline), \
          mock.patch.object(cli, "geocode_zip", lambda z: ORIGIN):
         assert cli.main(["--zip", "32118", "--top", "3", "--details"]) == 0
     assert "Florida surf check" in capsys.readouterr().out
+
+
+# --- Tide timezone handling -------------------------------------------------
+# NOAA is asked for time_zone=lst_ldt, so predictions come back in the
+# STATION's local time. fetch_tide must therefore compare them against "now"
+# in that station's timezone, not against the machine's local clock. The three
+# Panhandle spots are US/Central while the rest of Florida is US/Eastern.
+
+class _FakeResp:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return self._payload
+
+
+def _tide_payload_at(when):
+    return {"predictions": [{"t": when.strftime("%Y-%m-%d %H:%M"), "type": "L", "v": "0.1"}]}
+
+
+def test_fetch_tide_uses_station_timezone_not_machine_clock():
+    """
+    A tide 20 minutes away in Central time must be found when the station is
+    Central, and must NOT be found when the same timestamp is read as Eastern
+    (where it is already 40 minutes in the past). This pins the exact bug the
+    live run hit: Pensacola skipped an imminent Low and reported the next
+    morning's High instead, inverting tide_state from falling to rising.
+
+    Deliberately independent of the timezone the test machine runs in.
+    """
+    central_now = dt.datetime.now(ZoneInfo("America/Chicago")).replace(tzinfo=None)
+    payload = _tide_payload_at(central_now + dt.timedelta(minutes=20))
+
+    def fake_get(url, params=None, timeout=None):
+        return _FakeResp(payload)
+
+    session = mock.Mock()
+    session.get = fake_get
+
+    state, label = conditions.fetch_tide("8729840", "America/Chicago", session)
+    assert state == "falling" and label is not None, \
+        "imminent Central tide should be picked up for a Central station"
+
+    state_eastern, label_eastern = conditions.fetch_tide("8729840", "America/New_York", session)
+    assert (state_eastern, label_eastern) == (None, None), \
+        "same timestamp read as Eastern is in the past and must not be returned"
+
+
+def test_every_spot_timezone_is_loadable_and_panhandle_is_central():
+    """spots.py carries a tz per spot; it must be a real IANA zone."""
+    for s in SPOTS:
+        ZoneInfo(s.tz)  # raises if bogus
+    panhandle = [s for s in SPOTS if "Panhandle" in s.region]
+    assert panhandle, "expected Panhandle spots in the spot list"
+    assert all(s.tz == "America/Chicago" for s in panhandle)
+    assert all(s.tz == "America/New_York" for s in SPOTS if "Panhandle" not in s.region)
