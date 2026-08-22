@@ -19,17 +19,16 @@ normalizes that score against drive time from your zip code to produce a single
   2  New Smyrna Beach Inlet      +0.23   6.2   Sat 11:00     32m  -0.27   p35 -0.5s   Break-even - your call
   3  Ormond Beach                -0.20   5.6   Sat 12:00     12m  -0.10   p26 -1.1s   Break-even  [below normal]
   --------------------------------------------------------------------------------------------
-  BEST = the best surfable hour in the next 24h; all figures are for that hour.
+  BEST = the best surfable hour in the window; all figures are for that hour.
   VALUE = surf (in SDs above normal) minus drive time, at 120 min per SD.  Positive = worth going.
 ```
 
 **`VALUE` is the whole answer.** Positive means the surf is worth the drive;
 the number is how much margin you have, in standard deviations. `BEST` is when
-to go.
+to go, and `VS NORM` is what makes it meaningful — a 2.8ft day reads as
+unremarkable in absolute terms and is a genuine top-10% day in Florida.
 
-
-`VS NORM` is the part that answers *"is today actually special?"* — a 2.8ft day
-reads as unremarkable in absolute terms and is a genuine top-10% day in Florida.
+Use `--days 5` to plan a weekend rather than an afternoon.
 
 
 ---
@@ -231,7 +230,7 @@ home on the best day it has ever seen. At 120 it scores +1.17. Change it with
 
 Standardising distance across the spot list would make it relative to whichever
 spots happen to be listed, destroying the absolute calibration the score
-depends on. Measured against the shipped 26 spots:
+depends on. Measured against the shipped spot list:
 
 | | a distance z of −1.0 means |
 |---|---|
@@ -336,7 +335,7 @@ cannot answer the question you actually care about — *"is today unusually
 good?"* — because that depends entirely on what Florida normally does. A
 2.5ft/11s day is unremarkable in Hawaii and a red-letter day here.
 
-So the tool pools **~5 years of daily-maximum swell across all 26 spots** into a
+So the tool pools **~5 years of daily-maximum swell across all 41 spots** into a
 single statewide seasonal baseline, and reports today as a percentile against
 it. That's the `VS NORM` column.
 
@@ -475,7 +474,7 @@ Everything is free, public, documented, and key-free.
 
 This tool deliberately minimizes the load it puts on free services:
 
-- **All 26 spots are fetched in 2 API calls, not 52.** Open-Meteo accepts
+- **All 41 spots are fetched in 2 API calls, not 82.** Open-Meteo accepts
   comma-separated coordinate lists, so wave data for every spot arrives in one
   request and wind data in another.
 - **Responses are cached locally for 30 minutes** (`requests-cache`). Running it
@@ -484,14 +483,14 @@ This tool deliberately minimizes the load it puts on free services:
   tolerates 7 days of seasonal drift before rebuilding. An earlier version keyed
   the cache on an exact date, so it expired at midnight and re-ran the full pull
   every single day — precisely the thing that trips the rate limit. It is a
-  single batched request, but a large one — ~1.1M samples across 26 spots and
+  single batched request, but a large one — millions of samples across 41 spots and
   five years. Running it every invocation would trip Open-Meteo's per-minute
   rate limit, which then starves the live conditions request in the same run.
   The cache (`.fl_surf_climatology.json`, gitignored) is what prevents that.
 - **Rate-limit errors are not retried.** Open-Meteo's limit is per-minute, so
   short backoff could never outlast it and each attempt would spend more of the
   quota. The tool fails fast with an accurate message instead.
-- **Tides are fetched per-station, not per-spot** — 26 spots share 9 NOAA stations.
+- **Tides are fetched per-station, not per-spot** — 41 spots share 10 NOAA stations.
 - **Zip lookups are offline** after the first run.
 
 If OSRM or NOAA is unreachable, the tool degrades rather than failing: distances
@@ -570,7 +569,7 @@ Coast, west central** (8) · **Gulf Coast, Panhandle** (3)
 
 ```
 fl_surf_check/
-├── spots.py        # The 26 spots: coordinates, beach bearings, tide stations
+├── spots.py        # The 41 spots: coordinates, beach bearings, tide stations
 ├── location.py     # Zip code → lat/lon (pgeocode, Nominatim fallback)
 ├── distance.py     # Great-circle + OSRM driving distance, decay function
 ├── conditions.py   # Open-Meteo + NOAA fetching, batched and cached
@@ -580,7 +579,7 @@ fl_surf_check/
 
 tests/
 ├── test_scoring.py       # 32 tests on the scoring math
-├── test_climatology.py   # 66 tests on baselines, rarity, value, storms, daylight
+├── test_climatology.py   # 68 tests on baselines, rarity, value, storms, daylight
 └── test_cli_offline.py   # 11 end-to-end tests with the network mocked
 ```
 
@@ -597,10 +596,10 @@ python -m pytest tests/ -q
 ```
 
 ```
-109 passed in 1.13s
+111 passed in 1.61s
 ```
 
-All 109 tests run **offline** — network calls are mocked and `build_baseline`
+All 111 tests run **offline** — network calls are mocked and `build_baseline`
 takes an injectable client — so the suite is fast and works in CI. They cover
 the scoring curves (monotonicity, bounds, continuity, Florida-specific tuning),
 the distance decay math, the worth-the-drive blend (including that an epic far
@@ -693,10 +692,10 @@ matter: because the baseline is built from daily maxima and a thunderstorm is a
 1–3 hour afternoon event, excluding storm hours moves the percentiles by 0.00%.
 
 **Nearby spots can share a forecast cell.** Open-Meteo snaps each request to the
-nearest wet grid cell, up to ~14 miles. The 26 spots collapse into 22 distinct
-cells, so four pairs — St. Augustine/Vilano, Flagler/Ormond, New Smyrna/Ponce,
-Patrick/Indialantic — get identical conditions and are separated only by drive
-time.
+nearest wet grid cell, up to ~14 miles. The 41 spots collapse into 36 distinct
+cells, so four groups get identical conditions and are separated only by drive
+time: St. Augustine/Vilano, Flagler/Ormond, Patrick/Indialantic, and New
+Smyrna/Ponce/Daytona Beach Shores.
 
 **Bigger always scores better, even when it shouldn't.** Rarity is monotonic in
 swell height by design (`APPLY_CLOSEOUT_ROLLOFF = False`), so a 15ft swell
