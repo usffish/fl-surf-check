@@ -64,6 +64,14 @@ pip install -r requirements.txt
 python -m fl_surf_check --zip 32118
 ```
 
+Set your home zip once and drop the flag entirely:
+
+```bash
+export FL_SURF_ZIP=33613        # add to ~/.zshrc to make it stick
+python -m fl_surf_check
+python -m fl_surf_check --days 5
+```
+
 No API keys. No signup. No accounts. Every data source used is free and public.
 
 **First run needs internet** to download the zip-code database (a few MB, via
@@ -79,7 +87,7 @@ python -m fl_surf_check --zip ZIP [options]
 
 | Flag | Default | What it does |
 |---|---|---|
-| `--zip`, `-z` | *required* | Your 5-digit zip code — the drive origin. |
+| `--zip`, `-z` | `$FL_SURF_ZIP` | Your 5-digit zip code — the drive origin. Falls back to the `FL_SURF_ZIP` environment variable. |
 | `--top`, `-n` | `10` | How many spots to show. `0` shows all 26. |
 | `--minutes-per-sd` | `120` | Minutes of driving one standard deviation of surf is worth. The exchange rate in the value score. |
 | `--worth-only` | off | Show only spots with a positive value score. |

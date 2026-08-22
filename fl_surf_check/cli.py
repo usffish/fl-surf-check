@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import os
 import sys
 
 import requests
@@ -37,6 +38,10 @@ from .scoring import (
 )
 from .spots import SPOTS
 
+#: Environment variable holding a default origin, so the common case is just
+#: `fl-surf-check` with no arguments.
+ZIP_ENV_VAR = "FL_SURF_ZIP"
+
 DEFAULT_DECAY_MILES = 75.0
 DEFAULT_SURF_WEIGHT = 0.7
 
@@ -56,8 +61,10 @@ examples:
   fl-surf-check --zip 32118 --details           # show the score breakdown
 """,
     )
-    parser.add_argument("--zip", "-z", required=True, dest="zip_code",
-                        help="Your 5-digit US zip code (the drive origin).")
+    parser.add_argument("--zip", "-z", dest="zip_code", default=None,
+                        help="Your 5-digit US zip code (the drive origin). Defaults to "
+                             f"the {ZIP_ENV_VAR} environment variable if set, so you can "
+                             "export it once instead of typing it every run.")
     parser.add_argument("--top", "-n", type=int, default=10,
                         help="How many spots to show (default: 10, use 0 for all).")
     parser.add_argument("--decay-miles", type=float, default=DEFAULT_DECAY_MILES,
@@ -432,8 +439,14 @@ def main(argv=None) -> int:
         print("error: --surf-weight must be between 0 and 1", file=sys.stderr)
         return 2
 
+    zip_code = args.zip_code or os.environ.get(ZIP_ENV_VAR)
+    if not zip_code:
+        print(f"error: no zip code given. Pass --zip, or set {ZIP_ENV_VAR}:\n"
+              f"    export {ZIP_ENV_VAR}=33613", file=sys.stderr)
+        return 2
+
     try:
-        origin = geocode_zip(args.zip_code)
+        origin = geocode_zip(zip_code)
     except GeocodeError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

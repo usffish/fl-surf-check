@@ -202,3 +202,24 @@ def test_every_spot_timezone_is_loadable_and_panhandle_is_central():
     assert panhandle, "expected Panhandle spots in the spot list"
     assert all(s.tz == "America/Chicago" for s in panhandle)
     assert all(s.tz == "America/New_York" for s in SPOTS if "Panhandle" not in s.region)
+
+
+# --- default origin ---------------------------------------------------------
+
+def test_zip_falls_back_to_the_environment(offline, capsys, monkeypatch):
+    """Setting FL_SURF_ZIP once should replace typing --zip every run."""
+    monkeypatch.setenv(cli.ZIP_ENV_VAR, "33613")
+    assert cli.main(["--top", "2"]) == 0
+    assert "Florida surf check" in capsys.readouterr().out
+
+
+def test_explicit_zip_beats_the_environment(offline, capsys, monkeypatch):
+    monkeypatch.setenv(cli.ZIP_ENV_VAR, "99999")
+    assert cli.main(["--zip", "33613", "--top", "2"]) == 0
+
+
+def test_missing_zip_explains_both_options(capsys, monkeypatch):
+    monkeypatch.delenv(cli.ZIP_ENV_VAR, raising=False)
+    assert cli.main(["--top", "2"]) == 2
+    err = capsys.readouterr().err
+    assert "--zip" in err and cli.ZIP_ENV_VAR in err
