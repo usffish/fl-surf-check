@@ -13,7 +13,12 @@ import sys
 import requests
 
 from .climatology import is_daylight, load_baseline
-from .conditions import Conditions, fetch_marine_and_wind, fetch_tide
+from .conditions import (
+    MAX_FORECAST_DAYS,
+    Conditions,
+    fetch_marine_and_wind,
+    fetch_tide,
+)
 from .distance import closeness_factor, get_drive_estimate
 from .location import GeocodeError, geocode_zip
 from .scoring import (
@@ -67,6 +72,10 @@ examples:
                         help="Hard-exclude any spot whose surf score is below this.")
     parser.add_argument("--details", action="store_true",
                         help="Show the per-factor score breakdown and raw conditions.")
+    parser.add_argument("--days", "-d", type=int, default=1,
+                        help="How many days ahead to consider (1-7, default: 1). "
+                             "Each spot is scored on its best surfable hour anywhere "
+                             "in the window, and BEST shows which day that is.")
     parser.add_argument("--minutes-per-sd", type=float, default=MINUTES_PER_SIGMA,
                         help=f"Minutes of driving that one standard deviation of surf "
                              f"is worth (default: {MINUTES_PER_SIGMA:g}). This is the "
@@ -91,7 +100,7 @@ def gather(origin, args):
     spots = list(SPOTS)
 
     # One batched request each for waves and wind, covering all spots.
-    conditions = fetch_marine_and_wind(spots)
+    conditions = fetch_marine_and_wind(spots, hours_ahead=args.days * 24)
 
     session = requests.Session()
 
@@ -103,7 +112,7 @@ def gather(origin, args):
         tide_by_station = {}
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
             futures = {
-                pool.submit(fetch_tide, st, tz, session): (st, tz)
+                pool.submit(fetch_tide, st, tz, session, args.days * 24 + 24): (st, tz)
                 for st, tz in stations
             }
             for fut in concurrent.futures.as_completed(futures):
@@ -132,6 +141,11 @@ def gather(origin, args):
     if not args.no_history:
         baseline = load_baseline(spots, force_refresh=args.refresh_history)
 
+    def _local_date(ts, spot):
+        import datetime as _dt
+        from zoneinfo import ZoneInfo
+        return _dt.datetime.fromtimestamp(ts, ZoneInfo(spot.tz)).date()
+
     def _daylight(ts, lat, lon):
         import numpy as _np
         return bool(is_daylight(_np.array([float(ts)]), lat, lon)[0])
@@ -142,7 +156,7 @@ def gather(origin, args):
         drive = drives[spot.name]
         # Score every surfable hour in the window and take the best, rather
         # than whichever hour the tool happened to be run in.
-        pick = pick_best_hour(readings, spot, baseline, _daylight)
+        pick = pick_best_hour(readings, spot, baseline, _daylight, _local_date)
         cond, surf, rare = pick.conditions, pick.surf, pick.rarity
 
         # value = sigma(surf) - drive_minutes / minutes_per_sigma. Both terms in
@@ -194,6 +208,57 @@ def filter_and_sort(rows, args):
     return out
 
 
+def _day_summary(rows, args) -> list[str]:
+    """
+    Best spot for each day in the window.
+
+    With 41 spots over several days a full matrix is unreadable, and the
+    question a multi-day run is actually asking is "which day, and where" -
+    so this collapses to one line per day.
+    """
+    import datetime as _dt
+    from zoneinfo import ZoneInfo
+
+    by_day: dict = {}
+    for r in rows:
+        pick = r["best_hour"]
+        if not pick or r["value"].total is None:
+            continue
+        cost = r["value"].drive_cost
+        for day, entry in (pick.by_day or {}).items():
+            if entry.sigma is None:
+                continue
+            val = entry.sigma - cost
+            if day not in by_day or val > by_day[day][0]:
+                local = _dt.datetime.fromtimestamp(entry.time, ZoneInfo(r["spot"].tz))
+                by_day[day] = (val, r, local, entry)
+
+    if len(by_day) < 2:
+        return []
+
+    out = ["  " + "-" * 92, f"  BEST DAY OF THE NEXT {args.days}", "  " + "-" * 92]
+    best_key = max(by_day, key=lambda k: by_day[k][0])
+    for key in sorted(by_day):
+        val, r, local, entry = by_day[key]
+        mark = "->" if key == best_key else "  "
+        out.append(
+            f"  {mark} {local:%a %d %b}  {val:>+6.2f}  {r['spot'].name[:26]:<28}"
+            f"{local:%H:%M}  swell "
+            + (f"{entry.conditions.swell_height_ft:.1f}ft/"
+               f"{entry.conditions.swell_period_s:.0f}s"
+               if entry.conditions.swell_height_ft is not None else "n/a")
+        )
+    if args.days >= 4:
+        out.append(
+            "     (days 4+ are directional - swell autocorrelation is 0.26 at 4 days"
+        )
+        out.append(
+            "      and 0.21 at 5, so treat the far end as a plan, not a promise.)"
+        )
+    out.append("")
+    return out
+
+
 def _local_hhmm(row) -> str:
     """Local clock time of the hour being reported for this spot."""
     import datetime as _dt
@@ -224,6 +289,9 @@ def render(rows, origin, args) -> str:
     lines.append("")
     lines.append(f"  Florida surf check  -  from {origin.label}")
     lines.append(f"  {len(rows)} spots shown, ranked by whether they're worth the drive")
+    if getattr(args, "days", 1) > 1:
+        lines.extend(_day_summary(rows, args))
+
     storms = [r for r in rows if r["storm"] == "active"]
     if storms:
         lines.append("  " + "!" * 92)
@@ -329,7 +397,8 @@ def render(rows, origin, args) -> str:
 
     lines.append("  " + "-" * 92)
     lines.append(
-        "  BEST = the best surfable hour in the next 24h; all figures are for that hour."
+        f"  BEST = the best surfable hour in the next {args.days * 24}h; all figures "
+        f"are for that hour."
     )
     lines.append(
         f"  VALUE = surf (in SDs above normal) minus drive time, at "
@@ -355,6 +424,10 @@ def render(rows, origin, args) -> str:
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
 
+    if not 1 <= args.days <= MAX_FORECAST_DAYS:
+        print(f"error: --days must be between 1 and {MAX_FORECAST_DAYS} "
+              f"(the marine model has no usable swell beyond that)", file=sys.stderr)
+        return 2
     if not 0.0 <= args.surf_weight <= 1.0:
         print("error: --surf-weight must be between 0 and 1", file=sys.stderr)
         return 2

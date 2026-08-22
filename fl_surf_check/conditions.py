@@ -135,6 +135,18 @@ def _window(hourly, hours_ahead: int) -> tuple[int, int, int]:
 
 FORECAST_HOURS = 24
 
+#: Longest window the marine model actually supports. Measured, not guessed:
+#: at forecast_days=7 it returns 168 hours with zero NaN; at 10 the last 24
+#: hours come back empty, and at 16 more than a third of the window is missing.
+#: The atmospheric model runs further (16 days) but the swell is the binding
+#: constraint, so requests are capped here.
+MAX_FORECAST_DAYS = 7
+
+
+def _forecast_days_for(hours_ahead: int) -> int:
+    """Whole forecast days needed to cover a window, capped at what the model has."""
+    return max(2, min(MAX_FORECAST_DAYS, (hours_ahead + 47) // 24))
+
 
 def fetch_marine_and_wind(spots, hours_ahead: int = FORECAST_HOURS):
     """
@@ -176,7 +188,7 @@ def fetch_marine_and_wind(spots, hours_ahead: int = FORECAST_HOURS):
                     ],
                     "length_unit": "imperial",
                     "timezone": "UTC",
-                    "forecast_days": 2,
+                    "forecast_days": _forecast_days_for(hours_ahead),
                 },
             )
         )
@@ -214,7 +226,7 @@ def fetch_marine_and_wind(spots, hours_ahead: int = FORECAST_HOURS):
                     ],
                     "wind_speed_unit": "mph",
                     "timezone": "UTC",
-                    "forecast_days": 2,
+                    "forecast_days": _forecast_days_for(hours_ahead),
                 },
             )
         )
@@ -281,6 +293,7 @@ def fetch_tide(
     station_id: str,
     tz: str = "America/New_York",
     session: requests.Session | None = None,
+    hours: int = 48,
 ) -> tuple[str | None, str | None]:
     """
     Get (tide_state, next_tide_label) for a NOAA station.
@@ -310,7 +323,7 @@ def fetch_tide(
         "time_zone": "lst_ldt",
         "format": "json",
         "begin_date": now.strftime("%Y%m%d"),
-        "range": 48,
+        "range": max(24, min(240, hours)),
         "application": "fl-surf-check",
     }
 

@@ -46,7 +46,7 @@ def _fake_marine(spots, hours_ahead=24):
     return out
 
 
-def _fake_tide(station, tz="America/New_York", session=None):
+def _fake_tide(station, tz="America/New_York", session=None, hours=48):
     return "rising", "High 14:32"
 
 
@@ -137,7 +137,7 @@ def test_missing_data_does_not_crash(capsys):
         s.name: [(0, Conditions(errors=("all sources down",)))] for s in spots
     }
     with mock.patch.object(cli, "fetch_marine_and_wind", empty), \
-         mock.patch.object(cli, "fetch_tide", lambda st, tz="America/New_York", session=None: (None, None)), \
+         mock.patch.object(cli, "fetch_tide", lambda st, tz="America/New_York", session=None, hours=48: (None, None)), \
          mock.patch.object(cli, "get_drive_estimate", _fake_drive), \
          mock.patch.object(cli, "load_baseline", _fake_baseline), \
          mock.patch.object(cli, "geocode_zip", lambda z: ORIGIN):

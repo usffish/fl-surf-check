@@ -33,7 +33,7 @@ All scores are on a 0-10 scale.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 # ---------------------------------------------------------------------------
 # Region tuning
@@ -872,9 +872,13 @@ class BestHour:
     rarity: RarityScore
     sigma: float | None          # rarity + wind, the value score's input
     n_considered: int            # daylight hours actually evaluated
+    #: Best hour for each local date in the window, keyed by date. Needed for a
+    #: multi-day view: a spot has one overall best hour, so grouping spots by
+    #: that alone would silently drop every day nothing happened to peak on.
+    by_day: dict = field(default_factory=dict)
 
 
-def pick_best_hour(readings, spot, baseline, is_daylight_fn) -> BestHour | None:
+def pick_best_hour(readings, spot, baseline, is_daylight_fn, local_date_fn=None) -> BestHour | None:
     """
     Score every surfable hour in the window and return the best.
 
@@ -882,7 +886,11 @@ def pick_best_hour(readings, spot, baseline, is_daylight_fn) -> BestHour | None:
     arbitrary hour is the wrong thing to compare against it. Scoring the window
     and taking its maximum puts both sides of the comparison in the same units,
     and it answers the more useful question: not "how is it right now" but
-    "is it worth going today, and when".
+    "is it worth going, and when".
+
+    `by_day` on the result carries the best hour for each local date, so a
+    multi-day run can report every day rather than only the days some spot
+    happened to peak on.
 
     Night hours are skipped for the same reason they are excluded from the
     baseline - they cannot be surfed. If the whole window is dark, the first
@@ -892,6 +900,7 @@ def pick_best_hour(readings, spot, baseline, is_daylight_fn) -> BestHour | None:
         return None
 
     best = None
+    per_day: dict = {}
     considered = 0
     for ts, cond in readings:
         if not is_daylight_fn(ts, spot.lat, spot.lon):
@@ -901,8 +910,13 @@ def pick_best_hour(readings, spot, baseline, is_daylight_fn) -> BestHour | None:
         rare = rarity_score(cond, baseline)
         sigma = effective_sigma(rare, surf)
         key = sigma if sigma is not None else surf.total
+        entry = BestHour(ts, cond, surf, rare, sigma, 0)
         if best is None or key > best[0]:
-            best = (key, BestHour(ts, cond, surf, rare, sigma, 0))
+            best = (key, entry)
+        if local_date_fn is not None:
+            d = local_date_fn(ts, spot)
+            if d not in per_day or key > per_day[d][0]:
+                per_day[d] = (key, entry)
 
     if best is None:  # window is entirely dark
         ts, cond = readings[0]
@@ -912,4 +926,5 @@ def pick_best_hour(readings, spot, baseline, is_daylight_fn) -> BestHour | None:
 
     chosen = best[1]
     return BestHour(chosen.time, chosen.conditions, chosen.surf, chosen.rarity,
-                    chosen.sigma, considered)
+                    chosen.sigma, considered,
+                    {d: e for d, (_, e) in per_day.items()})

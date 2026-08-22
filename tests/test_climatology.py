@@ -11,6 +11,8 @@ import datetime as dt
 import json
 import math
 
+from zoneinfo import ZoneInfo
+
 import numpy as np
 import pytest
 
@@ -690,3 +692,48 @@ def test_sigma_is_monotonic_in_height():
     ]
     assert sigmas == sorted(sigmas)
     assert sigmas[-1] > sigmas[0]
+
+
+# --- multi-day forecast window ---------------------------------------------
+
+def test_forecast_days_covers_the_window_and_respects_the_model_ceiling():
+    """
+    Measured limits: the marine model returns 168 clean hours at
+    forecast_days=7, but the last day is empty at 10 and a third of the window
+    is missing at 16. Requests are capped there regardless of --days.
+    """
+    from fl_surf_check.conditions import MAX_FORECAST_DAYS, _forecast_days_for
+    assert MAX_FORECAST_DAYS == 7
+    assert _forecast_days_for(24) >= 2       # today plus tomorrow's early hours
+    assert _forecast_days_for(120) >= 6      # 5 days needs 6 to cover the offset
+    assert _forecast_days_for(999) == MAX_FORECAST_DAYS
+
+
+def test_best_hour_records_every_day_in_the_window():
+    """
+    A spot has one overall best hour, so a multi-day summary built from that
+    alone would silently drop every day nothing happened to peak on. `by_day`
+    must carry one entry per local date.
+    """
+    import datetime as _dt
+    from fl_surf_check.scoring import pick_best_hour
+
+    spot = SPOTS[0]
+    start = int(_dt.datetime(2023, 6, 15, 10, tzinfo=_dt.timezone.utc).timestamp())
+    readings = [
+        (start + k * 3600, Conditions(
+            wave_height_ft=2.0, wave_period_s=9.0, wave_direction_deg=spot.facing_deg,
+            swell_height_ft=2.0, swell_period_s=9.0, swell_direction_deg=spot.facing_deg,
+            wind_speed_mph=5.0, wind_direction_deg=spot.offshore_deg))
+        for k in range(96)  # four days
+    ]
+    local_date = lambda ts, sp: _dt.datetime.fromtimestamp(
+        ts, ZoneInfo(sp.tz)).date()
+    pick = pick_best_hour(readings, spot, _linear_baseline(),
+                          lambda ts, lat, lon: climatology.is_daylight(
+                              np.array([float(ts)]), lat, lon)[0],
+                          local_date)
+    assert pick is not None
+    assert len(pick.by_day) >= 4, f"expected 4+ days, got {sorted(pick.by_day)}"
+    for entry in pick.by_day.values():
+        assert entry.sigma is not None

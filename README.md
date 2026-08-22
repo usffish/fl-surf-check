@@ -40,6 +40,7 @@ reads as unremarkable in absolute terms and is a genuine top-10% day in Florida.
 - [Usage](#usage)
 - [How the surf score works](#how-the-surf-score-works)
 - [The value calculation](#the-value-calculation)
+- [Planning several days ahead](#planning-several-days-ahead)
 - [Which hour it scores](#which-hour-it-scores)
 - [Rarity: is today one of the good ones?](#rarity-is-today-one-of-the-good-ones)
 - [Thunderstorms](#thunderstorms)
@@ -88,6 +89,7 @@ python -m fl_surf_check --zip ZIP [options]
 | `--max-miles` | *none* | Hard cutoff — drop anything further than this. |
 | `--min-score` | *none* | Hard cutoff — drop anything below this surf score. |
 | `--details` | off | Show the per-factor breakdown and raw conditions. |
+| `--days`, `-d` | `1` | How many days ahead to consider (1–7). |
 | `--rare-only` | off | Show only spots having an unusually good day for the time of year. |
 | `--no-tides` | off | Skip NOAA tide lookups. Faster; tide is a minor input. |
 | `--no-history` | off | Skip the statewide historical baseline. Drops the `VS NORM` and `BONUS` columns. |
@@ -246,6 +248,52 @@ with an exponential distance decay. That number had **no natural zero** — a
 flat, unsurfable day scored 5.6/10, which reads as "maybe," and its meaning
 shifted with `--surf-weight` and `--decay-miles`. The blend survives only as a
 fallback for `--no-history`, where there is no sigma to work with.
+
+---
+
+## Planning several days ahead
+
+`--days N` (1–7) widens the window. Each spot is still scored on its single
+best surfable hour, and `BEST` shows which day that falls on — so a Wednesday
+run with `--days 5` covers Thursday through Sunday:
+
+```bash
+python -m fl_surf_check --zip 33613 --days 5
+```
+
+With more than one day it also prints a **best day** summary, since a 41-spot
+by 5-day matrix is unreadable and the question you are actually asking is
+"which day, and where":
+
+```
+  BEST DAY OF THE NEXT 5
+     Sat 22 Aug   -0.38  Spessard Holland            11:00  swell 1.0ft/8s
+     Sun 23 Aug   -0.24  Apollo Beach (Canaveral NS  12:00  swell 1.2ft/8s
+  -> Mon 24 Aug   -0.15  Apollo Beach (Canaveral NS  09:00  swell 1.2ft/8s
+     Tue 25 Aug   -0.47  Apollo Beach (Canaveral NS  08:00  swell 1.1ft/8s
+     Wed 26 Aug   -0.61  Apollo Beach (Canaveral NS  10:00  swell 1.0ft/7s
+```
+
+**Seven days is the hard ceiling**, and it is the swell model that sets it, not
+the atmosphere. Measured: at `forecast_days=7` the marine API returns 168 hours
+with zero gaps; at 10 the final day comes back empty, and at 16 more than a
+third of the window is missing. Wind and CAPE run to 16 days, but without swell
+they are no use.
+
+**Trust the far end less.** Florida swell decorrelates quickly — the
+day-over-day correlation of daily-max swell height is 0.74 at one day but only
+0.26 by day four:
+
+| lead | correlation | median change |
+|---|---|---|
+| 1 day | 0.74 | 19% |
+| 2 days | 0.49 | 29% |
+| 3 days | 0.33 | 35% |
+| 5 days | 0.21 | 38% |
+
+The forecast model does much better than persistence, but the same physics
+applies: day 5 is directional, not precise. Runs of four days or more say so in
+the output.
 
 ---
 
