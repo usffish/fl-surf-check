@@ -12,7 +12,7 @@ import sys
 
 import requests
 
-from .climatology import load_baseline
+from .climatology import is_daylight, load_baseline
 from .conditions import Conditions, fetch_marine_and_wind, fetch_tide
 from .distance import closeness_factor, get_drive_estimate
 from .location import GeocodeError, geocode_zip
@@ -20,8 +20,11 @@ from .scoring import (
     MINUTES_PER_SIGMA,
     drive_allowance_minutes,
     effective_drive,
+    effective_sigma,
+    pick_best_hour,
     rarity_score,
     score_conditions,
+    value_score,
     storm_blocks_travel,
     storm_risk,
     storm_warning,
@@ -65,9 +68,12 @@ examples:
     parser.add_argument("--details", action="store_true",
                         help="Show the per-factor score breakdown and raw conditions.")
     parser.add_argument("--minutes-per-sd", type=float, default=MINUTES_PER_SIGMA,
-                        help=f"Extra driving time you'll accept per standard deviation "
-                             f"above normal conditions (default: {MINUTES_PER_SIGMA:g} min). "
-                             f"Set 0 to rank on raw drive time only.")
+                        help=f"Minutes of driving that one standard deviation of surf "
+                             f"is worth (default: {MINUTES_PER_SIGMA:g}). This is the "
+                             f"exchange rate in the value score.")
+    parser.add_argument("--worth-only", action="store_true",
+                        help="Show only spots with a positive value score, i.e. where the "
+                             "surf actually justifies the drive.")
     parser.add_argument("--rare-only", action="store_true",
                         help="Show only spots having an unusually good day for the time of "
                              "year, judged against ~5 years of statewide history.")
@@ -104,8 +110,9 @@ def gather(origin, args):
                 tide_by_station[futures[fut]] = fut.result()
         for spot in spots:
             state, label = tide_by_station.get((spot.tide_station, spot.tz), (None, None))
-            conditions[spot.name].tide_state = state
-            conditions[spot.name].next_tide = label
+            for _, c in conditions.get(spot.name, []):
+                c.tide_state = state
+                c.next_tide = label
 
     # Drive times, in parallel (OSRM demo server, one route per spot).
     drives = {}
@@ -125,34 +132,42 @@ def gather(origin, args):
     if not args.no_history:
         baseline = load_baseline(spots, force_refresh=args.refresh_history)
 
+    def _daylight(ts, lat, lon):
+        import numpy as _np
+        return bool(is_daylight(_np.array([float(ts)]), lat, lon)[0])
+
     rows = []
     for spot in spots:
-        cond = conditions.get(spot.name, Conditions())
+        readings = conditions.get(spot.name) or [(0, Conditions())]
         drive = drives[spot.name]
-        surf = score_conditions(cond, spot)
-        rare = rarity_score(cond, baseline)
+        # Score every surfable hour in the window and take the best, rather
+        # than whichever hour the tool happened to be run in.
+        pick = pick_best_hour(readings, spot, baseline, _daylight)
+        cond, surf, rare = pick.conditions, pick.surf, pick.rarity
 
-        # Exceptional conditions buy extra drive time: every geometric SD above
-        # normal is worth --minutes-per-sd more driving. The discount is applied
-        # to the drive BEFORE distance decay, so a far spot on a rare day
-        # competes with a close spot on an ordinary one.
-        allowance = drive_allowance_minutes(
-            rare.sigma, rare.n_days, minutes_per_sigma=args.minutes_per_sd
-        )
-        # Great surf buys extra driving - but never toward a lightning storm.
+        # value = sigma(surf) - drive_minutes / minutes_per_sigma. Both terms in
+        # the same units, so the number has a natural zero: positive means the
+        # surf is worth the trip.
         risk = storm_risk(cond)
-        if storm_blocks_travel(risk):
-            allowance = 0.0
-        eff_miles, eff_minutes = effective_drive(
-            drive.distance_miles, drive.duration_minutes, allowance
-        )
+        # Swell rarity alone ignores wind, which the historical record does not
+        # carry - fold today's wind in before pricing the drive.
+        sigma = pick.sigma
+        if sigma is not None and storm_blocks_travel(risk):
+            # No amount of swell justifies driving toward lightning.
+            sigma = min(sigma, 0.0)
 
-        close = closeness_factor(eff_miles, args.decay_miles)
-        worth = worth_the_drive(surf.total, eff_miles, close, args.surf_weight)
+        value = value_score(sigma, drive.duration_minutes,
+                            minutes_per_sigma=args.minutes_per_sd)
+
+        # Legacy blend, kept only for --no-history where there is no sigma.
+        close = closeness_factor(drive.distance_miles, args.decay_miles)
+        worth = worth_the_drive(surf.total, drive.distance_miles, close,
+                                args.surf_weight)
+
         rows.append({
             "spot": spot, "conditions": cond, "drive": drive,
             "surf": surf, "worth": worth, "rarity": rare, "storm": risk,
-            "allowance": allowance, "eff_miles": eff_miles, "eff_minutes": eff_minutes,
+            "value": value, "best_hour": pick,
         })
     return rows
 
@@ -163,12 +178,30 @@ def filter_and_sort(rows, args):
         out = [r for r in out if r["drive"].distance_miles <= args.max_miles]
     if args.min_score is not None:
         out = [r for r in out if r["surf"].total >= args.min_score]
+    if getattr(args, "worth_only", False):
+        out = [r for r in out if r["value"].worth_it]
     if getattr(args, "rare_only", False):
         out = [r for r in out if r["rarity"].is_standout]
-    out.sort(key=lambda r: r["worth"].total, reverse=True)
+    # Rank on the value score; fall back to the legacy blend only when no
+    # baseline is available (--no-history) and every value is None.
+    if any(r["value"].total is not None for r in out):
+        out.sort(key=lambda r: (r["value"].total is not None, r["value"].total),
+                 reverse=True)
+    else:
+        out.sort(key=lambda r: r["worth"].total, reverse=True)
     if args.top and args.top > 0:
         out = out[: args.top]
     return out
+
+
+def _local_hhmm(row) -> str:
+    """Local clock time of the hour being reported for this spot."""
+    import datetime as _dt
+    from zoneinfo import ZoneInfo
+    ts = row["best_hour"].time
+    if not ts:
+        return "-"
+    return _dt.datetime.fromtimestamp(ts, ZoneInfo(row["spot"].tz)).strftime("%a %H:%M")
 
 
 def _month_name() -> str:
@@ -221,37 +254,36 @@ def render(rows, origin, args) -> str:
 
     lines.append("  " + "-" * 92)
     lines.append(
-        f"  {'#':<3}{'SPOT':<30}{'SURF':>6}{'WORTH':>7}{'MILES':>7}{'DRIVE':>8}"
-        f"{'VS NORM':>12}{'BONUS':>8}   VERDICT"
+        f"  {'#':<3}{'SPOT':<26}{'VALUE':>7}{'SURF':>6}{'BEST':>12}{'DRIVE':>8}"
+        f"{'COST':>7}{'VS NORM':>12}   VERDICT"
     )
     lines.append("  " + "-" * 92)
 
     for i, r in enumerate(rows, 1):
         spot, drive, surf, worth = r["spot"], r["drive"], r["surf"], r["worth"]
-        name = spot.name if len(spot.name) <= 28 else spot.name[:25] + "..."
+        name = spot.name if len(spot.name) <= 24 else spot.name[:21] + "..."
         approx = "~" if drive.is_estimate else " "
-        rare = r["rarity"]
+        rare, val = r["rarity"], r["value"]
         rare_cell = f"p{rare.percentile:.0f}" if rare.percentile is not None else "-"
         if rare.sigma is not None and rare.percentile is not None:
             rare_cell += f" {rare.sigma:+.1f}s"
-        bonus = r["allowance"]
-        bonus_cell = f"-{_fmt_time(bonus)}" if bonus >= 1 else "-"
+        val_cell = f"{val.total:+.2f}" if val.total is not None else "-"
         flag = rare.label()
 
         # An active thunderstorm overrides the verdict outright. Leaving "GO.
         # Drop everything" next to a lightning warning is worse than useless -
         # the two lines contradict each other and the wrong one is louder.
-        verdict = worth.verdict
+        verdict = val.verdict if val.total is not None else worth.verdict
         if r["storm"] == "active":
             verdict = "LIGHTNING - do not paddle out"
         elif r["storm"] == "likely":
-            verdict = f"{worth.verdict} (storms likely)"
+            verdict = f"{verdict} (storms likely)"
         lines.append(
-            f"  {i:<3}{name[:28]:<30}"
-            f"{surf.total:>5.1f} {worth.total:>6.1f} "
-            f"{approx}{drive.distance_miles:>5.0f} "
-            f"{_fmt_time(drive.duration_minutes):>8}"
-            f"{rare_cell:>12}{bonus_cell:>8}   {verdict}"
+            f"  {i:<3}{name[:24]:<26}"
+            f"{val_cell:>7}{surf.total:>6.1f}{_local_hhmm(r):>12}"
+            f"{approx}{_fmt_time(drive.duration_minutes):>7}"
+            f"{-val.drive_cost:>7.2f}"
+            f"{rare_cell:>12}   {verdict}"
             + (f"  [{flag}]" if flag and r["storm"] != "active" else "")
         )
 
@@ -279,12 +311,13 @@ def render(rows, origin, args) -> str:
                         extra += f", {c.precip_probability:.0f}% precip"
                     extra += ")"
                 lines.append(f"      (!) {warn}{extra}")
-            if r["allowance"] >= 1:
+            if val.total is not None:
+                margin = val.margin_minutes()
+                verb = "still worth it with" if margin >= 0 else "short by"
                 lines.append(
-                    f"      {rare.sigma:+.1f} SD above normal -> worth "
-                    f"{_fmt_time(r['allowance'])} extra driving; "
-                    f"{_fmt_time(drive.duration_minutes)} scored as "
-                    f"{_fmt_time(r['eff_minutes'])}"
+                    f"      value = {val.sigma:+.2f} SD - "
+                    f"{_fmt_time(drive.duration_minutes)}/{args.minutes_per_sd:g}min "
+                    f"= {val.total:+.2f}   ({verb} {_fmt_time(abs(margin))} of driving)"
                 )
             lines.append(f"      waves {wave} / {per}   wind {wind}"
                          + (f"   tide {c.next_tide}" if c.next_tide else ""))
@@ -296,8 +329,11 @@ def render(rows, origin, args) -> str:
 
     lines.append("  " + "-" * 92)
     lines.append(
-        f"  SURF = conditions out of 10.  WORTH = conditions blended with distance "
-        f"({args.surf_weight:.0%} conditions)."
+        "  BEST = the best surfable hour in the next 24h; all figures are for that hour."
+    )
+    lines.append(
+        f"  VALUE = surf (in SDs above normal) minus drive time, at "
+        f"{args.minutes_per_sd:g} min per SD.  Positive = worth going."
     )
     if any(r["rarity"].percentile is not None for r in rows):
         lines.append(
@@ -305,8 +341,7 @@ def render(rows, origin, args) -> str:
             "history for this time of year;"
         )
         lines.append(
-            f"            BONUS = drive time earned at {args.minutes_per_sd:g} min per SD "
-            f"above normal, discounted before ranking."
+            f"            COST = the drive in those same units. VALUE = VS NORM sigma + COST."
         )
         lines.append(
             "            (marine record starts Oct 2021; thin baselines shrink toward normal.)"
@@ -340,7 +375,11 @@ def main(argv=None) -> int:
 
     rows = filter_and_sort(rows, args)
     if not rows:
-        if args.rare_only:
+        if args.worth_only:
+            print("\n  Nothing is worth the drive right now - no spot's surf covers "
+                  "the time to get there.\n"
+                  "  Run without --worth-only to see the least-bad options.\n")
+        elif args.rare_only:
             print("\n  No spot is having an unusually good day for this time of year.\n"
                   "  Run without --rare-only to see the best of an ordinary day.\n")
         else:

@@ -22,14 +22,19 @@ from fl_surf_check.scoring import (
     RARITY_RARE,
     RARITY_STANDOUT,
     RARITY_TOP,
+    MINUTES_PER_SIGMA,
     THUNDERSTORM_CODES,
+    WIND_SIGMA_RANGE,
     drive_allowance_minutes,
+    effective_sigma,
     effective_drive,
     rarity_score,
     shrink_percentile,
     storm_blocks_travel,
     storm_risk,
     storm_warning,
+    value_score,
+    wind_sigma,
 )
 from fl_surf_check.spots import SPOTS
 
@@ -314,9 +319,10 @@ def test_history_start_matches_measured_coverage():
 def test_one_sigma_buys_roughly_the_configured_minutes():
     """The headline rule: +1 SD above normal is worth ~60 more minutes."""
     # n_days large enough that the evidence damping is negligible.
-    got = drive_allowance_minutes(1.0, n_days=100_000, minutes_per_sigma=60.0)
-    assert got == pytest.approx(60.0, rel=0.01)
-    assert drive_allowance_minutes(2.0, n_days=100_000) == pytest.approx(120.0, rel=0.01)
+    got = drive_allowance_minutes(1.0, n_days=100_000, minutes_per_sigma=MINUTES_PER_SIGMA)
+    assert got == pytest.approx(MINUTES_PER_SIGMA, rel=0.01)
+    assert drive_allowance_minutes(2.0, n_days=100_000) == pytest.approx(
+        2 * MINUTES_PER_SIGMA, rel=0.01)
 
 
 def test_allowance_scales_linearly_with_sigma():
@@ -496,3 +502,191 @@ def test_historical_archive_cannot_supply_storm_data():
     assert THUNDERSTORM_CODES == {95, 96, 99}
     assert "cape" not in climatology.HISTORY_VARS
     assert "weather_code" not in climatology.HISTORY_VARS
+
+
+# --- the value calculation --------------------------------------------------
+#
+#     value = sigma(surf) - drive_minutes / minutes_per_sigma
+#
+# One sigma of surf buys 60 minutes of driving. Positive means go.
+
+def test_one_sigma_exactly_pays_for_the_configured_minutes():
+    """
+    The calibration, stated directly: N sigma buys N * MINUTES_PER_SIGMA of
+    driving, so each of these is exactly break-even. Written against the
+    constant rather than a literal so the exchange rate can be retuned
+    without rewriting the test.
+    """
+    for n in (1.0, 2.0, 3.0):
+        assert value_score(n, n * MINUTES_PER_SIGMA).total == pytest.approx(0.0)
+
+
+def test_value_sign_answers_the_question():
+    assert value_score(2.0, 60.0).worth_it       # 2 SD, 1 hour -> go
+    assert not value_score(1.0, 120.0).worth_it  # 1 SD, 2 hours -> don't
+
+
+def test_margin_is_reported_in_minutes():
+    """A value of +1.0 means one more sigma-worth of driving would still be fine."""
+    v = value_score(2.0, MINUTES_PER_SIGMA)
+    assert v.total == pytest.approx(1.0)
+    assert v.margin_minutes() == pytest.approx(MINUTES_PER_SIGMA)
+
+
+def test_a_flat_day_is_negative_everywhere_even_next_door():
+    """
+    A cross-sectional z-score always has a winner; a climatological one does
+    not. On a genuinely flat day nothing should read as worth going, however
+    close it is.
+    """
+    for drive in (5.0, 30.0, 120.0):
+        assert not value_score(-1.0, drive).worth_it
+
+
+def test_distance_is_absolute_not_relative_to_the_spot_list():
+    """
+    The same drive must cost the same regardless of what else is on the list -
+    this is why distance is not itself z-scored. 90 minutes is 1.5 SD, always.
+    """
+    drive = 1.5 * MINUTES_PER_SIGMA
+    assert value_score(0.0, drive).drive_cost == pytest.approx(1.5)
+    assert value_score(0.0, drive).total == pytest.approx(-1.5)
+
+
+def test_minutes_per_sigma_changes_the_exchange_rate():
+    assert value_score(1.0, 120.0, minutes_per_sigma=120.0).total == pytest.approx(0.0)
+    assert value_score(1.0, 60.0, minutes_per_sigma=30.0).total == pytest.approx(-1.0)
+
+
+def test_value_is_none_without_a_baseline():
+    v = value_score(None, 60.0)
+    assert v.total is None and not v.worth_it and v.margin_minutes() is None
+
+
+def test_negative_drive_time_cannot_create_value():
+    assert value_score(0.0, -500.0).drive_cost == 0.0
+
+
+# --- wind must reach the value score ---------------------------------------
+
+def test_wind_separates_otherwise_identical_swell():
+    """
+    Regression: the historical baseline is swell-only, so before `wind_sigma`
+    a glassy 3ft/10s day and a blown-out one produced an identical value score
+    despite the absolute surf score separating them by 2.5 points.
+    """
+    class _S:  # minimal stand-in for SurfScore
+        def __init__(self, wind): self.wind = wind
+    class _R:
+        sigma = 1.42
+        n_days = 130
+    glassy = effective_sigma(_R(), _S(9.9))
+    blown = effective_sigma(_R(), _S(2.1))
+    assert glassy > blown
+    # A drive priced at 1.5 sigma sits between the two, so the wind term alone
+    # decides whether the trip is worth it.
+    drive = 1.5 * MINUTES_PER_SIGMA
+    assert value_score(glassy, drive).total > value_score(blown, drive).total
+    assert value_score(glassy, drive).worth_it
+    assert not value_score(blown, drive).worth_it
+
+
+def test_neutral_or_missing_wind_moves_nothing():
+    """score_wind returns 5.0 when wind data is missing; that must be a no-op."""
+    assert wind_sigma(5.0) == pytest.approx(0.0)
+
+
+def test_wind_adjustment_is_bounded():
+    assert wind_sigma(10.0) == pytest.approx(WIND_SIGMA_RANGE)
+    assert wind_sigma(0.0) == pytest.approx(-WIND_SIGMA_RANGE)
+
+
+def test_effective_sigma_is_none_without_rarity():
+    class _S: wind = 8.0
+    assert effective_sigma(None, _S()) is None
+
+
+# --- night hours are excluded from the record -------------------------------
+#
+# A baseline that counts 3am swell describes the ocean, not the surf. Those
+# hours can never be ridden, so they must not set "normal" or supply a day's
+# maximum.
+
+def _ts(y, m, d, h, tz_offset=0):
+    return float(dt.datetime(y, m, d, h, tzinfo=dt.timezone.utc).timestamp()) - tz_offset
+
+
+def test_solar_elevation_matches_published_sunrise_within_ten_minutes():
+    """
+    Validated against published Cocoa Beach sunrise/sunset at both solstices.
+    Hourly data cannot resolve better than this anyway.
+    """
+    lat, lon = 28.32, -80.61
+    cases = [  # date, local sunrise, local sunset, UTC offset hours
+        (dt.date(2023, 6, 21), 6 + 26 / 60, 20 + 20 / 60, -4),
+        (dt.date(2023, 12, 21), 7 + 11 / 60, 17 + 34 / 60, -5),
+    ]
+    for d, rise_local, set_local, off in cases:
+        # Sample only the target LOCAL day, so daylight either side cannot leak in.
+        local_midnight = dt.datetime(d.year, d.month, d.day, tzinfo=dt.timezone.utc).timestamp()
+        ts = local_midnight - off * 3600 + np.arange(0, 86400, 60.0)
+        el = climatology._solar_elevation(ts, lat, lon)
+        up = np.flatnonzero(el >= 0)
+        first = up[0] / 60.0          # minutes since local midnight -> hours
+        last = up[-1] / 60.0
+        assert abs(first - rise_local) < 0.2, f"sunrise off by {abs(first-rise_local)*60:.0f} min"
+        assert abs(last - set_local) < 0.2, f"sunset off by {abs(last-set_local)*60:.0f} min"
+
+
+def test_night_is_excluded_and_midday_is_kept():
+    lat, lon = 28.32, -80.61
+    # 07:00 UTC = 02:00 local in summer -> night; 17:00 UTC = 13:00 local -> day
+    assert not climatology.is_daylight(np.array([_ts(2023, 6, 21, 7)]), lat, lon)[0]
+    assert climatology.is_daylight(np.array([_ts(2023, 6, 21, 17)]), lat, lon)[0]
+
+
+def test_roughly_half_the_record_is_daylight():
+    """Sanity check on the filter as a whole - Florida is not polar."""
+    ts = np.arange(_ts(2023, 1, 1, 0), _ts(2024, 1, 1, 0), 3600.0)
+    frac = climatology.is_daylight(ts, 28.32, -80.61).mean()
+    assert 0.45 < frac < 0.62, f"kept {frac:.0%} of hours, expected roughly half"
+
+
+def test_civil_twilight_keeps_dawn_patrol():
+    """
+    The threshold is -6 degrees, not 0, deliberately: first light is when
+    Florida's wind is calmest and most offshore, and a 0-degree cutoff would
+    discard the best hour of many days.
+    """
+    assert climatology.DAYLIGHT_ELEVATION_DEG == -6.0
+    lat, lon = 28.32, -80.61
+    # ~20 min before summer sunrise (06:26 local = 10:26 UTC)
+    pre_dawn = np.array([_ts(2023, 6, 21, 10) + 5 * 60])
+    assert climatology.is_daylight(pre_dawn, lat, lon)[0]
+    assert not climatology.is_daylight(pre_dawn, lat, lon, elevation=0.0)[0]
+
+
+def test_baseline_build_drops_night_hours():
+    """The filter must actually reach build_baseline, not just exist."""
+    spots = list(SPOTS)
+    b = build_baseline(spots, target_date=dt.date(2022, 6, 15), client=_FakeClient(len(spots)))
+    assert b is not None
+    # _FakeClient serves every hour; a 24h baseline would pool ~2x the spot-days
+    # per distinct day that a daylight-filtered one does.
+    assert b.n_observations == pytest.approx(b.n_days * len(spots), rel=0.05)
+    assert b.n_days > 0
+
+
+def test_sigma_is_monotonic_in_height():
+    """
+    Bigger is always better, by design: rarity must never turn down as the
+    swell grows. APPLY_CLOSEOUT_ROLLOFF is off, so the absolute surf score
+    keeps its Florida closeout curve while the value score does not inherit it.
+    """
+    b = _linear_baseline()
+    sigmas = [
+        rarity_score(Conditions(swell_height_ft=h, swell_period_s=10.0), b).sigma
+        for h in (1.0, 3.0, 5.0, 7.0, 9.0, 10.0)
+    ]
+    assert sigmas == sorted(sigmas)
+    assert sigmas[-1] > sigmas[0]

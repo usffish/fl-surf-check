@@ -13,16 +13,20 @@ normalizes that score against drive time from your zip code to produce a single
 ```
   Florida surf check  -  from Daytona Beach, FL 32118
   --------------------------------------------------------------------------------------------
-  #  SPOT                            SURF  WORTH  MILES   DRIVE     VS NORM   BONUS   VERDICT
+  #  SPOT                        VALUE  SURF        BEST   DRIVE   COST     VS NORM   VERDICT
   --------------------------------------------------------------------------------------------
-  1  Sebastian Inlet (First Peak)     8.6    8.1    118   2h21m   p88 +1.9s   -1h33m  GO. Drop everything  [RARE]
-  2  Ponce Inlet                      7.9    7.8     11      24m   p81 +1.4s    -1h08m  Go surf  [STANDOUT]
-  3  New Smyrna Beach Inlet           7.7    7.5     17      32m   p81 +1.4s    -1h08m  Go surf  [STANDOUT]
+  1  Ponce Inlet                 +0.31   6.2   Sat 11:00     24m  -0.20   p35 -0.5s   Worth the drive
+  2  New Smyrna Beach Inlet      +0.23   6.2   Sat 11:00     32m  -0.27   p35 -0.5s   Break-even - your call
+  3  Ormond Beach                -0.20   5.6   Sat 12:00     12m  -0.10   p26 -1.1s   Break-even  [below normal]
   --------------------------------------------------------------------------------------------
-  SURF = conditions out of 10.  WORTH = conditions blended with distance (70% conditions).
-  VS NORM = percentile (and geometric SDs) against ALL Florida spots' swell history for this time of year;
-            BONUS = drive time earned at 60 min per SD above normal, discounted before ranking.
+  BEST = the best surfable hour in the next 24h; all figures are for that hour.
+  VALUE = surf (in SDs above normal) minus drive time, at 120 min per SD.  Positive = worth going.
 ```
+
+**`VALUE` is the whole answer.** Positive means the surf is worth the drive;
+the number is how much margin you have, in standard deviations. `BEST` is when
+to go.
+
 
 `VS NORM` is the part that answers *"is today actually special?"* — a 2.8ft day
 reads as unremarkable in absolute terms and is a genuine top-10% day in Florida.
@@ -35,9 +39,9 @@ reads as unremarkable in absolute terms and is a genuine top-10% day in Florida.
 - [Quick start](#quick-start)
 - [Usage](#usage)
 - [How the surf score works](#how-the-surf-score-works)
-- [How the "worth the drive" normalization works](#how-the-worth-the-drive-normalization-works)
+- [The value calculation](#the-value-calculation)
+- [Which hour it scores](#which-hour-it-scores)
 - [Rarity: is today one of the good ones?](#rarity-is-today-one-of-the-good-ones)
-- [Earning drive time](#earning-drive-time)
 - [Thunderstorms](#thunderstorms)
 - [Tuning it to how you actually surf](#tuning-it-to-how-you-actually-surf)
 - [Data sources](#data-sources)
@@ -76,12 +80,13 @@ python -m fl_surf_check --zip ZIP [options]
 |---|---|---|
 | `--zip`, `-z` | *required* | Your 5-digit zip code — the drive origin. |
 | `--top`, `-n` | `10` | How many spots to show. `0` shows all 26. |
-| `--decay-miles` | `75` | How far you're comfortable driving. Higher = distance matters less. |
-| `--surf-weight` | `0.7` | `0`–`1`. How much conditions matter vs. distance. `1.0` ignores distance entirely. |
+| `--minutes-per-sd` | `120` | Minutes of driving one standard deviation of surf is worth. The exchange rate in the value score. |
+| `--worth-only` | off | Show only spots with a positive value score. |
+| `--decay-miles` | `75` | *Legacy.* Only used by the `--no-history` fallback blend. |
+| `--surf-weight` | `0.7` | *Legacy.* Only used by the `--no-history` fallback blend. |
 | `--max-miles` | *none* | Hard cutoff — drop anything further than this. |
 | `--min-score` | *none* | Hard cutoff — drop anything below this surf score. |
 | `--details` | off | Show the per-factor breakdown and raw conditions. |
-| `--minutes-per-sd` | `60` | Extra driving you'll accept per standard deviation above normal conditions. `0` ranks on raw drive time. |
 | `--rare-only` | off | Show only spots having an unusually good day for the time of year. |
 | `--no-tides` | off | Skip NOAA tide lookups. Faster; tide is a minor input. |
 | `--no-history` | off | Skip the statewide historical baseline. Drops the `VS NORM` and `BONUS` columns. |
@@ -93,11 +98,11 @@ python -m fl_surf_check --zip ZIP [options]
 # What's good near me right now?
 python -m fl_surf_check --zip 32118
 
-# I've got all day and a full tank
-python -m fl_surf_check --zip 32118 --decay-miles 200 --top 15
+# Only show me what's actually worth the drive
+python -m fl_surf_check --zip 32118 --worth-only
 
-# Just tell me where the best waves are, I don't care how far
-python -m fl_surf_check --zip 32118 --surf-weight 1.0
+# I've got all day: one good SD is worth four hours to me
+python -m fl_surf_check --zip 32118 --minutes-per-sd 240
 
 # I'll drive an hour, max, and only for something decent
 python -m fl_surf_check --zip 32118 --max-miles 60 --min-score 5
@@ -108,8 +113,8 @@ python -m fl_surf_check --zip 32118 --details
 # Only tell me if today is genuinely unusual
 python -m fl_surf_check --zip 32118 --rare-only
 
-# A great day is worth two extra hours per SD, not one
-python -m fl_surf_check --zip 32118 --minutes-per-sd 120
+# Stricter: a great day is only worth one extra hour per SD
+python -m fl_surf_check --zip 32118 --minutes-per-sd 60
 
 # Rank on raw drive time, ignoring how rare the day is
 python -m fl_surf_check --zip 32118 --minutes-per-sd 0
@@ -184,45 +189,94 @@ Two refinements that matter in practice:
 
 ---
 
-## How the "worth the drive" normalization works
+## The value calculation
 
-This is the part you actually asked for. Two steps:
-
-### 1. Turn distance into a 0–1 "closeness" factor
+Surf quality and drive time are different units, so the tool converts both into
+the same one — **standard deviations of surf** — and subtracts:
 
 ```
-closeness = exp( -miles / decay_miles )
+value = sigma(surf)  -  drive_minutes / minutes_per_sd
 ```
 
-Exponential decay, not a hard cutoff. At `--decay-miles 75` (the default):
+**One standard deviation above normal is worth 120 minutes of driving.** Two is
+worth four hours. The sign is the answer: positive means go, zero is
+break-even, and the magnitude is your margin.
 
-| Drive | Closeness |
+```
+ 0.5 sigma  ->  1h00m of driving
+ 1.0 sigma  ->  2h00m
+ 2.0 sigma  ->  4h00m
+ 3.0 sigma  ->  6h00m
+```
+
+The `--details` view shows the arithmetic:
+
+```
+value = +0.51 SD - 24m/120min = +0.31   (still worth it with 37m of driving)
+```
+
+### Why 120 and not 60
+
+Calibrated against the record rather than guessed. At 60 min/SD the single best
+surfable day in five years — New Smyrna, 14 September 2023, 5.1ft at 11s with
+3mph offshore wind, an effective **+2.63 sigma** — scored **−0.29** from Tampa.
+It justified 2.6 hours against a 2h55m drive, so the tool would have said stay
+home on the best day it has ever seen. At 120 it scores +1.17. Change it with
+`--minutes-per-sd`.
+
+### Why distance is not itself z-scored
+
+Standardising distance across the spot list would make it relative to whichever
+spots happen to be listed, destroying the absolute calibration the score
+depends on. Measured against the shipped 26 spots:
+
+| | a distance z of −1.0 means |
 |---|---|
-| 0 mi | 1.00 |
-| 25 mi | 0.72 |
-| 50 mi | 0.51 |
-| 75 mi | 0.37 |
-| 150 mi | 0.14 |
-| 300 mi | 0.02 |
+| from Daytona | 30 miles |
+| from Tampa | 109 miles |
 
-### 2. Blend it with the surf score
+"One sigma closer" cannot be worth a fixed 120 minutes in both places. Raw
+minutes keep the units absolute and comparable between users.
+
+### What replaced the old blend
+
+Earlier versions ranked on `worth = 10 × [w × surf/10 + (1−w) × closeness]`,
+with an exponential distance decay. That number had **no natural zero** — a
+flat, unsurfable day scored 5.6/10, which reads as "maybe," and its meaning
+shifted with `--surf-weight` and `--decay-miles`. The blend survives only as a
+fallback for `--no-history`, where there is no sigma to work with.
+
+---
+
+## Which hour it scores
+
+Not the one you happen to run it in. The tool scores **every surfable hour in
+the next 24 hours** and reports the best, shown in the `BEST` column — every
+other figure in that row belongs to that hour.
+
+This matters for two reasons.
+
+**The comparison was otherwise unfair.** The baseline is built from each day's
+*best* hour, so scoring it against an arbitrary current hour is
+apples-to-oranges. Measured on the record, a randomly chosen hour scored a
+median of **p34** against that baseline when it should average p50 — a
+systematic 16-point understatement of every rarity score. Scoring the window
+and taking its maximum puts both sides in the same units: median p48.
+
+**Florida's wind swings hard through the day.** Measured at Cocoa Beach over
+July–August, the sea breeze rotates the wind from 232° at 05:00 (offshore) to
+125° by 15:00 (onshore), roughly doubling in speed:
 
 ```
-worth = 10 × [ surf_weight × (surf ÷ 10)  +  (1 − surf_weight) × closeness ]
+local hr   wind mph   dir   wind score
+   5:00        4.2    232        6.0   offshore-ish
+  11:00        4.9    216        6.1   offshore-ish
+  15:00        6.8    125        5.2   ONSHORE
 ```
 
-Both terms are normalized to 0–1 before weighting, which is what lets a 0–10
-rating and a distance in miles be combined meaningfully at all.
-
-**Why a weighted blend rather than `surf × closeness`?** Multiplying lets
-distance zero out an otherwise perfect day, which isn't how anyone actually
-decides. A blend keeps a genuinely epic far-away spot competitive with a
-mediocre close one — which is exactly the trade-off you're trying to *see*.
-
-The `VERDICT` column reads the two numbers together and gives you the plain
-English call, from *"Flat — stay home"* through *"Worth a look"* to
-*"GO. Drop everything"* (and *"Epic — but that's a road trip"* when the great
-day is 200+ miles out).
+Same swell, very different surf. So the honest answer is often *"not now, but
+go tomorrow at 11"* — which is what the tool now says, rather than judging the
+whole day by whichever hour you asked in.
 
 ---
 
@@ -254,6 +308,22 @@ into the bottom fifth of the scale and the signal is lost. Percentile rank asks
 the same question ("where does this sit in the observed population?") but
 spreads evenly by construction and is immune to how extreme the extremes are.
 
+### Night hours are excluded
+
+You cannot surf in the dark, so night is dropped before the baseline is built —
+otherwise 3am swell would help set "normal" and could supply a day's maximum.
+
+The cutoff uses real solar geometry rather than fixed clock hours, because
+Florida's daylight swings about three hours between solstices. Validated
+against published Cocoa Beach sunrise/sunset at both solstices and equinoxes,
+worst error **8 minutes**. The threshold is civil twilight (−6°), not true
+sunrise: first light is when Florida's wind is calmest and most offshore, and a
+0° cutoff would discard the best hour of many days.
+
+It changes the numbers less than you would expect — p50 unchanged, p90 −2.3% —
+because daily maxima are robust to dropping hours. It is a correctness fix, not
+a scoring change.
+
 ### Why thin evidence gets shrunk
 
 The record only starts in October 2021, so a "top 2% day!" claim may rest on
@@ -274,20 +344,7 @@ Fixed cutoffs would be unreachable dead code.
 
 ---
 
-## Earning drive time
-
-Distance decay alone treats every day the same: the same `--decay-miles` on a
-flat Tuesday as on the best swell of the year. But willingness to drive isn't
-fixed — it stretches with how good the day is.
-
-> **Every 1 standard deviation above normal buys 60 more minutes of driving.**
-
-Tunable with `--minutes-per-sd` (`0` disables it). The discount is applied to
-the drive *before* ranking, so a far spot on a rare day competes with a close
-spot on an ordinary one. A 2-hour drive on a day that has earned 60 minutes is
-scored as though it were a 1-hour drive.
-
-### The standard deviation is geometric
+### Why the standard deviation is geometric
 
 Measured on the real record, raw swell height has a **skew of 1.95**. A plain
 z-score on that misbehaves badly:
@@ -299,12 +356,14 @@ z-score on that misbehaves badly:
 | +1 SD | p87.6 | **p84.8** (textbook: 84.1) |
 | biggest day in 5 years | z **+5.9** | z **+3.1** |
 
-At 60 minutes per SD, that +5.9 would have justified a *six-hour* drive. Taking
+At 120 minutes per SD, that +5.9 would have justified a *twelve-hour* drive. Taking
 logs first restores σ's textbook meaning, and the record day becomes a
 well-behaved +3.1σ ≈ three extra hours. Two guards on top: the sigma is damped
 by the same evidence weighting as the percentile, and the allowance is capped at
 four hours. Below-normal days earn nothing but are never penalised — the real
 drive time is already the honest cost.
+
+---
 
 ---
 
@@ -332,29 +391,21 @@ loaded gun with no trigger, and heavy rain with no instability is just rain.
 
 ## Tuning it to how you actually surf
 
-The defaults encode one particular set of preferences. Yours will differ:
+**"I'd drive further than that for a good day."**
+Raise `--minutes-per-sd`. At `240`, one standard deviation buys four hours.
 
-**"I'll drive further than that."**
-Raise `--decay-miles`. At `200`, a two-hour drive barely registers as a cost.
+**"I'm not driving more than an hour, ever."**
+Lower it, or just set `--max-miles`. At `--minutes-per-sd 60` a 1-SD day is
+worth only an hour.
 
-**"I only care about quality."**
-Raise `--surf-weight` toward `1.0` to rank purely on conditions.
+**"Only tell me when it's genuinely on."**
+`--worth-only` hides everything with a negative value score. `--rare-only` is
+stricter still — only days well above the seasonal norm.
 
-**"I only care about what's close."**
-Lower `--surf-weight` toward `0.0`, or just set `--max-miles`.
-
-**"It keeps recommending spots that are too big/small for me."**
-Edit the control points in `score_wave_height()` in `fl_surf_check/scoring.py`.
-They're a plain list of `(feet, score)` pairs — move the peak to where you like it.
-
-**"The wind call is backwards at my local."**
-Adjust that spot's `facing_deg` in `fl_surf_check/spots.py`. These are
-approximations of coastline orientation, not surveyed bearings.
-
-**"My spot isn't in here."**
-Add a `Spot(...)` entry to `SPOTS` in `fl_surf_check/spots.py`. You need a name,
-region, lat/lon, the direction the beach faces, and the nearest NOAA tide
-station ID.
+**"I care about different things than these weights."**
+Every scoring function in `scoring.py` is pure and has explicit control points.
+`WEIGHTS` sets the balance of height / period / wind / direction;
+`WIND_SIGMA_RANGE` sets how far wind alone can move the value score.
 
 ---
 
@@ -380,7 +431,10 @@ This tool deliberately minimizes the load it puts on free services:
   request and wind data in another.
 - **Responses are cached locally for 30 minutes** (`requests-cache`). Running it
   five times in a row hits the network once.
-- **The historical baseline is fetched once and cached for 30 days.** It is a
+- **The historical baseline is fetched once and cached for 30 days**, and
+  tolerates 7 days of seasonal drift before rebuilding. An earlier version keyed
+  the cache on an exact date, so it expired at midnight and re-ran the full pull
+  every single day — precisely the thing that trips the rate limit. It is a
   single batched request, but a large one — ~1.1M samples across 26 spots and
   five years. Running it every invocation would trip Open-Meteo's per-minute
   rate limit, which then starves the live conditions request in the same run.
@@ -433,7 +487,7 @@ fl_surf_check/
 
 tests/
 ├── test_scoring.py       # 32 tests on the scoring math
-├── test_climatology.py   # 48 tests on baselines, rarity, drive bonus, storms
+├── test_climatology.py   # 66 tests on baselines, rarity, value, storms, daylight
 └── test_cli_offline.py   # 11 end-to-end tests with the network mocked
 ```
 
@@ -450,10 +504,10 @@ python -m pytest tests/ -q
 ```
 
 ```
-91 passed in 0.64s
+109 passed in 1.13s
 ```
 
-All 91 tests run **offline** — network calls are mocked and `build_baseline`
+All 109 tests run **offline** — network calls are mocked and `build_baseline`
 takes an injectable client — so the suite is fast and works in CI. They cover
 the scoring curves (monotonicity, bounds, continuity, Florida-specific tuning),
 the distance decay math, the worth-the-drive blend (including that an epic far
@@ -496,6 +550,15 @@ nearest wet grid cell, up to ~14 miles. The 26 spots collapse into 22 distinct
 cells, so four pairs — St. Augustine/Vilano, Flagler/Ormond, New Smyrna/Ponce,
 Patrick/Indialantic — get identical conditions and are separated only by drive
 time.
+
+**Bigger always scores better, even when it shouldn't.** Rarity is monotonic in
+swell height by design (`APPLY_CLOSEOUT_ROLLOFF = False`), so a 15ft swell
+scores higher than a 5ft one. The *absolute* surf score disagrees — its height
+curve peaks at 5ft and falls away above 7ft, because Florida sandbars close out
+rather than hold shape — so `SURF` and `VALUE` will diverge on very large days.
+That is deliberate: the size at which a break stops being fun depends on who is
+paddling out. Set `APPLY_CLOSEOUT_ROLLOFF = True` to make rarity inherit the
+rolloff.
 
 **Beach bearings are estimates.** The `facing_deg` values approximate the
 coastline's orientation at each spot from map inspection. They're good enough to

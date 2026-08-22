@@ -22,18 +22,28 @@ from fl_surf_check.spots import SPOTS
 ORIGIN = Origin(29.2108, -81.0228, "Daytona Beach, FL 32118", "pgeocode")
 
 
-def _fake_marine(spots):
+def _fake_marine(spots, hours_ahead=24):
+    """
+    A full 24h window per spot, so best-hour selection is actually exercised
+    and the fixture does not depend on what time the suite happens to run.
+    """
     rng = random.Random(7)
-    return {
-        s.name: Conditions(
-            wave_height_ft=round(rng.uniform(0.4, 6.5), 1),
-            wave_period_s=round(rng.uniform(4, 14), 1),
-            wave_direction_deg=round(rng.uniform(40, 140)),
-            wind_speed_mph=round(rng.uniform(1, 22)),
-            wind_direction_deg=round(rng.uniform(0, 359)),
-        )
-        for s in spots
-    }
+    now = int(dt.datetime.now(dt.timezone.utc).timestamp())
+    out = {}
+    for s in spots:
+        h = round(rng.uniform(0.4, 6.5), 1)
+        p_ = round(rng.uniform(4, 14), 1)
+        d = round(rng.uniform(40, 140))
+        readings = []
+        for k in range(24):
+            readings.append((now + k * 3600, Conditions(
+                wave_height_ft=h, wave_period_s=p_, wave_direction_deg=d,
+                swell_height_ft=h, swell_period_s=p_, swell_direction_deg=d,
+                wind_speed_mph=round(rng.uniform(1, 22)),
+                wind_direction_deg=round(rng.uniform(0, 359)),
+            )))
+        out[s.name] = readings
+    return out
 
 
 def _fake_tide(station, tz="America/New_York", session=None):
@@ -123,7 +133,9 @@ def test_invalid_surf_weight_rejected():
 
 def test_missing_data_does_not_crash(capsys):
     """Every API can fail; the CLI must still produce output."""
-    empty = lambda spots: {s.name: Conditions(errors=("all sources down",)) for s in spots}
+    empty = lambda spots, hours_ahead=24: {
+        s.name: [(0, Conditions(errors=("all sources down",)))] for s in spots
+    }
     with mock.patch.object(cli, "fetch_marine_and_wind", empty), \
          mock.patch.object(cli, "fetch_tide", lambda st, tz="America/New_York", session=None: (None, None)), \
          mock.patch.object(cli, "get_drive_estimate", _fake_drive), \

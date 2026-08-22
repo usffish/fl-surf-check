@@ -385,6 +385,47 @@ def shrink_percentile(percentile: float, n_days: int, prior_days: float = RARITY
     return (percentile * n_days + 50.0 * prior_days) / (n_days + prior_days)
 
 
+#: Swell height at which Florida beach breaks stop improving on the ABSOLUTE
+#: curve in score_wave_height, which eases off above this because sandbars
+#: close out rather than hold shape.
+CLOSEOUT_PEAK_FT = 5.0
+
+#: Whether rarity should inherit that rolloff. OFF by design: sigma is
+#: deliberately monotonic in height, so bigger always scores better.
+#:
+#: The absolute surf score still applies the rolloff, so SURF and VALUE will
+#: disagree on very large days - SURF reads a 12ft swell as 5.0/10 while VALUE
+#: keeps rewarding it. That is intended, not a bug: the size at which a break
+#: stops being fun is a matter of who is paddling out, and this setting says
+#: to leave that judgement to the surfer rather than the scoring curve.
+#:
+#: Set True to make rarity peak near CLOSEOUT_PEAK_FT and fall away above it.
+APPLY_CLOSEOUT_ROLLOFF = False
+
+
+def _closeout_adjusted(height_sigma: float | None, height_ft: float | None) -> float | None:
+    """
+    Stop rarity rewarding swell that is too big to surf here.
+
+    A percentile is monotonic in height by construction: the bigger the swell,
+    the rarer it is, forever. That is the right answer to "how unusual is
+    this?" and the wrong answer to "should I go?" - measured on the record, a
+    12ft closeout scored +3.13 sigma and printed "GO. Drop everything", while
+    the absolute height curve had already fallen from 10.0 to 5.0 because
+    Florida sandbars cannot hold a swell that size.
+
+    Above the peak the sigma is scaled by how far the absolute curve has
+    dropped, so rarity and rideability stop disagreeing. Below it nothing
+    changes - a rare 4ft day is still simply rare.
+    """
+    if not APPLY_CLOSEOUT_ROLLOFF:
+        return height_sigma
+    if height_sigma is None or height_ft is None or height_ft <= CLOSEOUT_PEAK_FT:
+        return height_sigma
+    quality = score_wave_height(height_ft) / 10.0
+    return height_sigma * max(0.0, quality)
+
+
 @dataclass
 class RarityScore:
     """How unusual today's swell is against the statewide seasonal record."""
@@ -470,7 +511,8 @@ def rarity_score(conditions, baseline) -> RarityScore:
         return RarityScore(None, None, None, 0, 0)
 
     sigma = _combine_weighted(
-        (baseline.height_sigma(conditions.swell_height_ft), WEIGHTS["height"]),
+        (_closeout_adjusted(baseline.height_sigma(conditions.swell_height_ft),
+                            conditions.swell_height_ft), WEIGHTS["height"]),
         (baseline.period_sigma(conditions.swell_period_s), WEIGHTS["period"]),
     )
 
@@ -524,8 +566,17 @@ def rarity_score(conditions, baseline) -> RarityScore:
 # The sigma is shrunk by the same evidence weighting the rarity percentile uses.
 # A thin baseline cannot be allowed to send anyone on a four-hour drive.
 
-#: Extra driving time earned per geometric standard deviation above normal.
-MINUTES_PER_SIGMA = 60.0
+#: Minutes of driving that one standard deviation of surf is worth - the
+#: exchange rate at the heart of the value score.
+#:
+#: Calibrated against the record rather than guessed. At 60, the single best
+#: surfable day in five years (New Smyrna, 14 Sep 2023: 5.1ft at 11s, 3mph
+#: offshore, effective sigma +2.63) came out at -0.29 from Tampa - it justified
+#: 2.6 hours against a 2h55m drive, so the tool would have said stay home on
+#: the best day it has ever seen. 120 says a one-sigma day is worth two hours,
+#: which puts that day comfortably positive and matches what someone would
+#: actually do.
+MINUTES_PER_SIGMA = 120.0
 
 #: Ceiling on earned time, so a freak reading can never justify an absurd trip.
 MAX_ALLOWANCE_MINUTES = 240.0
@@ -563,7 +614,7 @@ def effective_drive(
     Discount a real drive by the time exceptional conditions have earned.
 
     Returns (effective_miles, effective_minutes). A 2-hour drive on a day that
-    has earned 60 minutes is scored as though it were a 1-hour drive, so it
+    has earned an hour is scored as though it were a 1-hour drive, so it
     competes with genuinely local options.
 
     Miles are scaled by the same fraction as minutes rather than being
@@ -654,3 +705,184 @@ def storm_blocks_travel(risk: str) -> bool:
     lightning storm. An active or likely storm forfeits the allowance entirely.
     """
     return risk in ("active", "likely")
+
+
+# ---------------------------------------------------------------------------
+# The value calculation
+# ---------------------------------------------------------------------------
+#
+#     value = sigma(surf) - drive_minutes / MINUTES_PER_SIGMA
+#
+# Both terms are in the same currency: standard deviations of surf quality.
+# One sigma above normal buys MINUTES_PER_SIGMA of driving, two buys twice
+# that, and so on.
+# Positive means the surf is worth the trip; zero is break-even; the magnitude
+# is how much margin you have either way. A value of +1 means you would still
+# be ahead after another hour in the car.
+#
+# WHY DISTANCE IS NOT ITSELF Z-SCORED
+# -----------------------------------
+# Standardising distance across the spot list would make it relative to
+# whatever spots happen to be in the list, which destroys the absolute
+# calibration this score depends on. Measured against the shipped 26 spots, a
+# distance z of -1.0 is 30 miles from Daytona but 109 miles from Tampa - so
+# "one sigma closer" would mean two completely different drives, and could not
+# be worth a fixed number of minutes in both. Dividing raw minutes by a fixed
+# minutes-per-sigma keeps the units absolute and comparable between users.
+#
+# This also replaces the earlier closeness/blend approach, which mixed a 0-1
+# decay factor with a 0-10 rating through a tunable weight. That produced a
+# number with no natural zero: you could not say what a given score meant
+# without also knowing --surf-weight and --decay-miles.
+
+
+@dataclass
+class ValueScore:
+    """The worth-the-drive calculation, in standard deviations of surf."""
+    total: float | None          # sigma minus the cost of the drive
+    sigma: float | None          # surf quality, in SDs above normal
+    drive_cost: float            # drive expressed in the same units
+    drive_minutes: float
+    verdict: str
+
+    @property
+    def worth_it(self) -> bool:
+        return self.total is not None and self.total > 0.0
+
+    def margin_minutes(self) -> float | None:
+        """How many minutes of extra driving this day would still justify."""
+        if self.total is None:
+            return None
+        return self.total * MINUTES_PER_SIGMA
+
+
+def value_score(
+    sigma: float | None,
+    drive_minutes: float,
+    minutes_per_sigma: float = MINUTES_PER_SIGMA,
+) -> ValueScore:
+    """
+    Score a spot as surf quality minus the cost of getting there.
+
+    `sigma` is how many standard deviations above normal the surf is, from
+    rarity_score. It is deliberately climatological rather than relative to the
+    other spots today: on a flat day every spot should score badly, which a
+    cross-sectional z-score could never express because it always has a winner.
+    """
+    if minutes_per_sigma <= 0:
+        cost = 0.0
+    else:
+        cost = max(0.0, drive_minutes) / minutes_per_sigma
+
+    if sigma is None:
+        return ValueScore(None, None, cost, drive_minutes, "no baseline - rarity unavailable")
+
+    total = sigma - cost
+    return ValueScore(total, sigma, cost, drive_minutes, _value_verdict(total, sigma))
+
+
+def _value_verdict(total: float, sigma: float) -> str:
+    """Plain-English reading of a value score."""
+    if total >= 2.0:
+        return "GO. Drop everything"
+    if total >= 1.0:
+        return "Go surf - worth another hour if you had to"
+    if total >= 0.25:
+        return "Worth the drive"
+    if total >= -0.25:
+        return "Break-even - your call"
+    if sigma <= -0.5:
+        return "Surf isn't there today"
+    return "Not worth the drive"
+
+
+# How much the wind can move the value score, in sigma. The swell sigma comes
+# from the historical record, which is swell-only - Open-Meteo's marine archive
+# carries no wind. Without this term the value score cannot tell a glassy day
+# from a blown-out one: measured, a 3ft/10s day scored identically at +1.42
+# sigma whether the wind was 4mph offshore or 25mph onshore, even though the
+# absolute surf score separated them by 2.5 points.
+#
+# Wind is directional, not a magnitude, so it has no natural z-score. Instead
+# the existing 0-10 wind sub-score is re-expressed on the sigma scale: a
+# perfectly groomed day is worth about an hour of extra driving, a blown-out
+# one costs about the same.
+WIND_SIGMA_RANGE = 1.0
+
+
+def wind_sigma(wind_score: float, sigma_range: float = WIND_SIGMA_RANGE) -> float:
+    """
+    Convert the 0-10 wind sub-score into a sigma-scale adjustment.
+
+    5.0 (neutral, or missing data) maps to 0, so a spot is never pushed either
+    way by wind we do not know about.
+    """
+    return ((wind_score - 5.0) / 5.0) * sigma_range
+
+
+def effective_sigma(rarity, surf) -> float | None:
+    """
+    The surf quality that goes into the value score.
+
+    Swell rarity against the historical record, adjusted for today's wind.
+    Returns None when there is no baseline to measure rarity against.
+    """
+    if rarity is None or rarity.sigma is None:
+        return None
+    return rarity.sigma + wind_sigma(surf.wind)
+
+
+# ---------------------------------------------------------------------------
+# Choosing which hour to report
+# ---------------------------------------------------------------------------
+
+@dataclass
+class BestHour:
+    """The pick of the forecast window for one spot."""
+    time: int                    # unix UTC
+    conditions: object           # the Conditions at that hour
+    surf: SurfScore
+    rarity: RarityScore
+    sigma: float | None          # rarity + wind, the value score's input
+    n_considered: int            # daylight hours actually evaluated
+
+
+def pick_best_hour(readings, spot, baseline, is_daylight_fn) -> BestHour | None:
+    """
+    Score every surfable hour in the window and return the best.
+
+    The historical baseline is built from each day's best hour, so a single
+    arbitrary hour is the wrong thing to compare against it. Scoring the window
+    and taking its maximum puts both sides of the comparison in the same units,
+    and it answers the more useful question: not "how is it right now" but
+    "is it worth going today, and when".
+
+    Night hours are skipped for the same reason they are excluded from the
+    baseline - they cannot be surfed. If the whole window is dark, the first
+    reading is returned so the spot still appears rather than vanishing.
+    """
+    if not readings:
+        return None
+
+    best = None
+    considered = 0
+    for ts, cond in readings:
+        if not is_daylight_fn(ts, spot.lat, spot.lon):
+            continue
+        considered += 1
+        surf = score_conditions(cond, spot)
+        rare = rarity_score(cond, baseline)
+        sigma = effective_sigma(rare, surf)
+        key = sigma if sigma is not None else surf.total
+        if best is None or key > best[0]:
+            best = (key, BestHour(ts, cond, surf, rare, sigma, 0))
+
+    if best is None:  # window is entirely dark
+        ts, cond = readings[0]
+        surf = score_conditions(cond, spot)
+        rare = rarity_score(cond, baseline)
+        return BestHour(ts, cond, surf, rare, effective_sigma(rare, surf), 0)
+
+    chosen = best[1]
+    return BestHour(chosen.time, chosen.conditions, chosen.surf, chosen.rarity,
+                    chosen.sigma, considered)

@@ -79,9 +79,25 @@ HISTORY_VARS = ("swell_wave_height", "swell_wave_period")
 DEFAULT_CACHE_PATH = ".fl_surf_climatology.json"
 CACHE_MAX_AGE_DAYS = 30
 
+# How far the cached window centre may sit from the date being scored before
+# the baseline is rebuilt. Without this the cache was keyed on an exact date,
+# so it expired at midnight and the ~1.1M-sample history pull ran EVERY day -
+# the precise condition that trips Open-Meteo's rate limit and starves the
+# live conditions request. The seasonal window is +/-14 days, so a centre a
+# few days off covers almost the same span: at 7 days the two windows share
+# 22 of 29 days.
+CACHE_WINDOW_DRIFT_DAYS = 7
+
 # Half-width of the seasonal window, in days. +/-14 balances "same time of
 # year" against having enough days to form a distribution.
 SEASON_WINDOW_DAYS = 14
+
+# Sun elevation (degrees) above which an hour counts as surfable light.
+# -6 is civil twilight: the sun is below the horizon but there is enough light
+# to see a set coming, which is exactly when dawn patrol happens. Using 0
+# (true sunrise) would throw away the best hour of many days - the calmest,
+# most offshore wind in Florida is right at first light.
+DAYLIGHT_ELEVATION_DEG = -6.0
 
 _LEVELS = tuple(range(0, 101))
 
@@ -177,6 +193,45 @@ def _percentile_of(value: float | None, curve: tuple[float, ...]) -> float | Non
     return float(idx + frac)
 
 
+def _solar_elevation(unix_times: np.ndarray, lat: float, lon: float) -> np.ndarray:
+    """
+    Sun elevation in degrees for each UTC timestamp, via the standard NOAA
+    approximation. Accurate to a fraction of a degree, which is far more than
+    this needs, and avoids taking on an astronomy dependency.
+    """
+    days = unix_times / 86400.0
+    doy = (days % 365.2422)
+    hours = (unix_times % 86400) / 3600.0
+
+    gamma = 2.0 * np.pi / 365.0 * (doy + (hours - 12.0) / 24.0)
+    eqtime = 229.18 * (
+        0.000075
+        + 0.001868 * np.cos(gamma) - 0.032077 * np.sin(gamma)
+        - 0.014615 * np.cos(2 * gamma) - 0.040849 * np.sin(2 * gamma)
+    )
+    decl = (
+        0.006918
+        - 0.399912 * np.cos(gamma) + 0.070257 * np.sin(gamma)
+        - 0.006758 * np.cos(2 * gamma) + 0.000907 * np.sin(2 * gamma)
+        - 0.002697 * np.cos(3 * gamma) + 0.001480 * np.sin(3 * gamma)
+    )
+
+    true_solar = hours * 60.0 + eqtime + 4.0 * lon
+    hour_angle = np.radians(true_solar / 4.0 - 180.0)
+    latr = np.radians(lat)
+    cos_zenith = (
+        np.sin(latr) * np.sin(decl)
+        + np.cos(latr) * np.cos(decl) * np.cos(hour_angle)
+    )
+    return 90.0 - np.degrees(np.arccos(np.clip(cos_zenith, -1.0, 1.0)))
+
+
+def is_daylight(unix_times: np.ndarray, lat: float, lon: float,
+                elevation: float = DAYLIGHT_ELEVATION_DEG) -> np.ndarray:
+    """True for hours with enough light to surf at this location."""
+    return _solar_elevation(unix_times, lat, lon) >= elevation
+
+
 def _daily_maxima(values: np.ndarray, times: np.ndarray):
     """Collapse an hourly series to one value per calendar day (UTC)."""
     days = times // 86400
@@ -237,13 +292,17 @@ def build_baseline(
     all_days: list[np.ndarray] = []
     n_spots = 0
 
-    for response in responses:
+    for spot, response in zip(spots, responses):
         hourly = response.Hourly()
         h = hourly.Variables(0).ValuesAsNumpy()
         p = hourly.Variables(1).ValuesAsNumpy()
         times = np.arange(len(h)) * hourly.Interval() + hourly.Time()
 
-        finite = ~np.isnan(h) & ~np.isnan(p)
+        # Night hours are dropped before anything else. A baseline that counts
+        # 3am swell describes the ocean, not the surf: those hours can never be
+        # ridden, so letting them set "normal" - or supply a day's maximum -
+        # measures something nobody can act on.
+        finite = ~np.isnan(h) & ~np.isnan(p) & is_daylight(times, spot.lat, spot.lon)
         if not finite.any():
             continue
 
@@ -308,8 +367,12 @@ def _cache_is_fresh(path: str, max_age_days: int, target: dt.date) -> bool:
             meta = json.load(fh).get("meta", {})
     except (OSError, ValueError):
         return False
-    if meta.get("window_center") != target.isoformat():
-        return False  # the baseline is seasonal; a new date needs a rebuild
+    try:
+        centre = dt.date.fromisoformat(meta["window_center"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    if abs((target - centre).days) > CACHE_WINDOW_DRIFT_DAYS:
+        return False  # the baseline is seasonal and has drifted too far
     try:
         built = dt.date.fromisoformat(meta["built"])
     except (KeyError, ValueError):
@@ -375,7 +438,8 @@ def load_baseline(
                         "window_days": window_days_of(),
                         "history_start": HISTORY_START,
                         "vars": list(HISTORY_VARS),
-                        "scope": "florida-wide pooled",
+                        "scope": "florida-wide pooled, daylight hours only",
+                        "daylight_elevation_deg": DAYLIGHT_ELEVATION_DEG,
                     },
                     "baseline": {
                         "height_p": list(baseline.height_p),
