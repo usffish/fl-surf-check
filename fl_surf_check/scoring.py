@@ -35,6 +35,22 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+# ---------------------------------------------------------------------------
+# Region tuning
+# ---------------------------------------------------------------------------
+#
+# These control points are the ONLY part of the scoring that is specific to
+# Florida. Everything else - the data sources, the baseline machinery, the
+# value calculation - is region-agnostic, and the marine API is global.
+#
+# They are named constants rather than literals buried in the functions so
+# they can be tuned in one place, and so a second region can be added later by
+# supplying a different set. What that would take is measured, not guessed:
+# Westport WA has a median day of 4.72ft and a p90 of 9.32ft, against Florida's
+# 1.31ft and 2.82ft. Fed to the curve below, a typical Westport day scores 9.8
+# and a genuinely big one scores 6.6 - the ordering inverts, because the curve
+# encodes "Florida sandbar" rather than "wave". See the README.
+
 # Relative importance of each sub-score in the overall surf rating.
 # These are opinionated but easy to tune - they must sum to 1.0.
 WEIGHTS = {
@@ -68,26 +84,52 @@ def _interpolate(x: float, points: list[tuple[float, float]]) -> float:
     return points[-1][1]
 
 
+#: Swell height (ft) -> 0-10, tuned for Florida beach breaks. REGION-SPECIFIC.
+HEIGHT_CURVE = [
+    (0.0, 0.0),
+    (0.7, 1.0),    # ankle slappers / flat
+    (1.5, 3.5),    # knee-waist, longboard-able
+    (2.5, 6.5),    # waist-chest, fun
+    (3.5, 9.0),    # chest-head, very good for FL
+    (5.0, 10.0),   # head+ - about as good as FL gets
+    (7.0, 8.5),    # overhead, starting to get thick
+    (10.0, 6.0),   # big and likely closing out
+    (15.0, 3.5),   # storm surf, mostly unrideable beach break
+]
+
+#: Swell period (s) -> 0-10. Less region-specific than height - long period
+#: means organised everywhere - but the useful range still varies by coast.
+PERIOD_CURVE = [
+    (0.0, 0.0),
+    (4.0, 1.0),    # pure wind chop
+    (6.0, 2.5),    # short-period windswell
+    (8.0, 5.0),    # mixed, workable
+    (10.0, 7.0),   # decent organization
+    (12.0, 8.75),  # proper groundswell
+    (14.0, 10.0),  # excellent
+    (20.0, 10.0),  # capped
+]
+
+#: Wind speed (mph) -> penalty subtracted from the wind sub-score.
+WIND_PENALTY_CURVE = [
+    (4.0, 0.0),
+    (12.0, 0.4),
+    (20.0, 1.6),
+    (30.0, 3.5),
+    (45.0, 5.5),
+]
+
+
 def score_wave_height(height_ft: float | None) -> float:
     """
-    Score wave height, tuned for Florida beach breaks.
+    Score wave height, tuned for Florida beach breaks via HEIGHT_CURVE.
 
     Peaks around 3-5ft. Eases off above ~7ft where FL sandbars tend to
     close out rather than hold shape.
     """
     if height_ft is None:
         return 0.0
-    return _interpolate(height_ft, [
-        (0.0, 0.0),
-        (0.7, 1.0),    # ankle slappers / flat
-        (1.5, 3.5),    # knee-waist, longboard-able
-        (2.5, 6.5),    # waist-chest, fun
-        (3.5, 9.0),    # chest-head, very good for FL
-        (5.0, 10.0),   # head+ - about as good as FL gets
-        (7.0, 8.5),    # overhead, starting to get thick
-        (10.0, 6.0),   # big and likely closing out
-        (15.0, 3.5),   # storm surf, mostly unrideable beach break
-    ])
+    return _interpolate(height_ft, HEIGHT_CURVE)
 
 
 def score_wave_period(period_s: float | None) -> float:
@@ -100,16 +142,7 @@ def score_wave_period(period_s: float | None) -> float:
     """
     if period_s is None:
         return 0.0
-    return _interpolate(period_s, [
-        (0.0, 0.0),
-        (4.0, 1.0),    # pure wind chop
-        (6.0, 2.5),    # short-period windswell
-        (8.0, 5.0),    # mixed, workable
-        (10.0, 7.0),   # decent organization
-        (12.0, 8.75),  # proper groundswell
-        (14.0, 10.0),  # excellent
-        (20.0, 10.0),  # capped
-    ])
+    return _interpolate(period_s, PERIOD_CURVE)
 
 
 def angular_difference(a: float, b: float) -> float:
@@ -152,13 +185,7 @@ def score_wind(
 
     # Baseline that decays as wind gets strong - even good offshore wind
     # becomes a problem when it's really honking.
-    strength_penalty = _interpolate(wind_speed_mph, [
-        (4.0, 0.0),
-        (12.0, 0.4),
-        (20.0, 1.6),
-        (30.0, 3.5),
-        (45.0, 5.5),
-    ])
+    strength_penalty = _interpolate(wind_speed_mph, WIND_PENALTY_CURVE)
 
     base = 6.0
     score = base + (alignment * 4.0 * influence) - strength_penalty

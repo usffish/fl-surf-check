@@ -39,16 +39,22 @@ class Spot:
         return (self.facing_deg + 180) % 360
 
 
-# NOAA CO-OPS tide stations used above, for reference:
-#   8720030 Fernandina Beach
-#   8720218 Mayport (Bar Pilots Dock), FL
-#   8721604 Trident Pier, Port Canaveral, FL
-#   8722670 Lake Worth Pier, FL
-#   8723214 Virginia Key, Biscayne Bay, FL
-#   8724580 Key West, FL
-#   8726520 St. Petersburg, FL
-#   8728690 Panama City, FL
-#   8729840 Pensacola, FL
+# NOAA CO-OPS tide prediction stations used below, all verified against the
+# live station list rather than assumed:
+#   8720030 Fernandina Beach, Amelia River
+#   8720218 Mayport (Bar Pilot Dock)
+#   8721604 Port Canaveral (Trident Pier)
+#   8722670 Lake Worth Pier (ocean)
+#   8723214 Virginia Key, Biscayne Bay
+#   8726034 Siesta Key, Big Sarasota Pass
+#   8726520 St. Petersburg
+#   8726724 Clearwater Beach
+#   8729210 Panama City Beach
+#   8729840 Pensacola
+#
+# That verification caught a real error: 8728690, previously used for Panama
+# City Beach and commented as such, is actually APALACHICOLA - roughly 100
+# miles east. Those tides were wrong.
 
 SPOTS = [
     # --- Northeast Florida ---
@@ -106,7 +112,7 @@ SPOTS = [
          "Jetty break at the south end of Miami Beach; needs real swell to work."),
 
     # --- Gulf Coast (generally smaller/weaker, wind/tropical-system driven) ---
-    Spot("Panama City Beach (Pier Park)", "Gulf Coast (Panhandle)", 30.1766, -85.8055, 175, "8728690",
+    Spot("Panama City Beach (Pier Park)", "Gulf Coast (Panhandle)", 30.1766, -85.8055, 175, "8729210",
          "Gulf beach break; best during cold-front or tropical-system swells.",
          tz="America/Chicago"),
     Spot("Navarre Beach", "Gulf Coast (Panhandle)", 30.3877, -86.8631, 170, "8729840",
@@ -115,4 +121,48 @@ SPOTS = [
     Spot("Pensacola Beach", "Gulf Coast (Panhandle)", 30.3280, -87.1669, 165, "8729840",
          "Gulf beach break near the pass; needs a strong weather system to fire.",
          tz="America/Chicago"),
+
+    # --- Added from the historical record (see README, "How many spots") ---
+    # Ranked by the share of days each supplies a good session over the 2021-10
+    # to 2026-08 record, and by how often each would be the top recommendation
+    # from a range of Florida origins.
+
+    # East coast gaps: the highest-quality water in the state.
+    Spot("Jupiter Inlet", "Treasure Coast", 26.9450, -80.0730, 82, "8722670",
+         "Best in the state on the record: a good session on 35.8% of days."),
+    Spot("Hobe Sound", "Treasure Coast", 27.0600, -80.1100, 82, "8722670",
+         "Quiet stretch just north of Jupiter; 30.5% good days."),
+    Spot("Lake Worth Pier", "Palm Beaches", 26.6120, -80.0350, 81, "8722670",
+         "Consistent pier peak, 27.6% good days."),
+    Spot("Delray Beach", "Palm Beaches", 26.4600, -80.0600, 81, "8722670",
+         "Beach break with easy access; 26.3% good days."),
+    Spot("Apollo Beach (Canaveral NS)", "East Central FL", 28.8700, -80.8100, 87, "8721604",
+         "North end of Canaveral National Seashore. Sits in a better forecast "
+         "cell than New Smyrna inlet and wins more often than any other spot."),
+    Spot("Spessard Holland", "East Central FL", 28.0330, -80.5400, 86, "8721604",
+         "South Melbourne Beach park; 24.3% good days."),
+    Spot("Daytona Beach Shores", "East Central FL", 29.1800, -80.9800, 89, "8721604",
+         "Fills the gap between Ormond and Ponce Inlet."),
+
+    # --- Gulf Coast (west central) ---
+    # Small and fickle - a good session on only 1-5% of days - but 30-60
+    # minutes from Tampa Bay rather than three hours. Simulated from a Tampa
+    # zip these win roughly a third of all days purely on drive time, which is
+    # exactly the trade the value score exists to make.
+    Spot("Honeymoon Island", "Gulf Coast (West Central)", 28.0660, -82.8320, 265, "8726724",
+         "Best of the Tampa-area Gulf beaches; wins 21% of days from Tampa."),
+    Spot("Clearwater Beach", "Gulf Coast (West Central)", 27.9775, -82.8271, 265, "8726724",
+         "Most accessible Tampa-area break; needs a strong west wind or a system."),
+    Spot("Indian Rocks Beach", "Gulf Coast (West Central)", 27.8870, -82.8480, 265, "8726724",
+         "Quieter than Clearwater, same swell window."),
+    Spot("Treasure Island", "Gulf Coast (West Central)", 27.7692, -82.7690, 260, "8726724",
+         "Wide beach south of Clearwater."),
+    Spot("St. Pete Beach", "Gulf Coast (West Central)", 27.7253, -82.7412, 258, "8726520",
+         "Southern end of the Pinellas barrier islands."),
+    Spot("Lido Key", "Gulf Coast (West Central)", 27.3100, -82.5750, 250, "8726034",
+         "Sarasota's town beach; occasional shape on a west swell."),
+    Spot("Siesta Key", "Gulf Coast (West Central)", 27.2676, -82.5540, 250, "8726034",
+         "Famously flat, but works on a strong system."),
+    Spot("Venice Beach", "Gulf Coast (West Central)", 27.1000, -82.4540, 248, "8726034",
+         "Southern Sarasota county; slightly more exposed than Siesta."),
 ]

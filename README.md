@@ -48,6 +48,7 @@ reads as unremarkable in absolute terms and is a genuine top-10% day in Florida.
 - [Spot list](#spot-list)
 - [Project layout](#project-layout)
 - [Testing](#testing)
+- [Adding another region later](#adding-another-region-later)
 - [Limitations and honest caveats](#limitations-and-honest-caveats)
 - [Credits](#credits)
 
@@ -453,23 +454,67 @@ drops out of the score.
 
 ## Spot list
 
-26 breaks, north to south:
+**41 spots**, and that number is measured rather than chosen. Ranked by the
+share of days each supplies a good session over the 2021-10 → 2026-08 record,
+and by how often each would be the top recommendation from a range of Florida
+origins.
 
-**Northeast FL** — Fernandina Beach · Jacksonville Beach Pier · Ponte Vedra · St. Augustine Pier · Vilano Beach
+### How many spots is the right number
 
-**East Central FL (Space Coast)** — Flagler Beach Pier · Ormond Beach · New Smyrna Beach Inlet · Ponce Inlet · Playalinda · Cocoa Beach Pier · Satellite Beach · Indialantic · **Sebastian Inlet**
+Two bounds. Below, the marine model is the limit: the grid is **1/12° ≈ 5.7
+miles**, so 77 candidate breaks collapsed into only 58 distinct forecasts. Two
+spots in one cell get byte-identical surf and differ only in drive time. The
+shipped 41 map to 36 distinct cells.
 
-**Treasure Coast** — Vero Beach · Fort Pierce Inlet · Stuart / House of Refuge · Juno Beach / Jupiter
+Above, most spots never win. Simulating every day of the record from seven
+different Florida origins:
 
-**Palm Beaches** — Reef Road · Boynton Beach Inlet
+| origin | spots that ever win | top 8 covers |
+|---|---|---|
+| Tampa | 23 of 75 | 97.6% |
+| Daytona | 9 | 99.9% |
+| Miami Beach | 17 | 92.9% |
+| Jacksonville Bch | 13 | 99.3% |
+| Pensacola | 6 | 100% |
+| Vero | 11 | 99.8% |
 
-**Broward / Miami-Dade** — Deerfield Beach · Fort Lauderdale · South Beach / South Pointe
+Any one surfer needs 8–10 spots. But the list serves every origin, and the
+**union of each origin's top 8 is 40** — which is where 41 comes from.
 
-**Gulf Coast (Panhandle)** — Panama City Beach · Navarre Beach · Pensacola Beach
+### The best water in the state
 
-> Gulf spots are included for completeness but only really work during cold
-> fronts or tropical systems. On a typical day they'll score near zero, which is
-> correct.
+```
+ 1 Jupiter Inlet          35.8% of days a good session
+ 2 Juno Beach             32.7%
+ 3 Apollo Beach           32.3%
+ 6 Hobe Sound             30.5%
+ 8 Lake Worth Pier        27.6%
+...
+23 Sebastian Inlet        19.6%
+40 Cocoa Beach Pier        8.1%   (of 75 candidates)
+```
+
+Two caveats worth stating plainly. **Cocoa Beach ranks low** because Cape
+Canaveral shelters it from NE swell — it is famous for being consistent and
+accessible, not big. And **Sebastian Inlet ranks lower than it deserves**: the
+scoring only sees open-ocean swell, while Sebastian's reputation comes from the
+jetty and sandbar wrapping that swell into a defined peak. No grid cell knows
+that. The same blind spot applies to every inlet and reef break here.
+
+### The Gulf spots exist for a reason
+
+The west-central Gulf beaches are poor in absolute terms — a good session on
+1–5% of days, against Jupiter's 36%. But simulated from a Tampa zip they win
+**roughly a third of all days**, because three hours of driving costs 1.5σ and
+they only need to beat the Atlantic by that much. That is exactly the trade the
+value score exists to make, and it could not be made while those beaches were
+missing from the list.
+
+### Regions covered
+
+**Northeast FL** (5) · **East Central / Space Coast** (12) · **Treasure Coast**
+(6) · **Palm Beaches** (4) · **Broward** (2) · **Miami-Dade** (1) · **Gulf
+Coast, west central** (8) · **Gulf Coast, Panhandle** (3)
 
 ---
 
@@ -526,6 +571,60 @@ invalidation. Two are regression tests for bugs the live run surfaced:
   actually be produced. The first thresholds were fixed percentiles (≥93, ≥97)
   while shrinkage capped the attainable value near p91 — making the top two
   labels dead code.
+
+---
+
+## Adding another region later
+
+The tool is deliberately Florida-only: 41 hardcoded spots, and scoring curves
+tuned to Florida beach breaks. If you want it somewhere else, here is exactly
+what is and isn't in the way — measured against real Pacific Northwest data
+rather than guessed.
+
+**Already region-agnostic.** Open-Meteo's marine API is global and returns
+clean history for Westport, WA back to 2021. NOAA CO-OPS covers every US coast,
+OSRM routes worldwide, `pgeocode` handles any US zip. Nothing in
+`conditions.py`, `distance.py` or `climatology.py` knows about Florida —
+`build_baseline` already pools whatever spots you hand it.
+
+**Three things are coupled.**
+
+1. **The spot list** (`spots.py`) is a module-level constant. It would need to
+   become data selected by proximity to your origin. Mechanical.
+
+2. **The baseline is pooled statewide.** Point `build_baseline` at a different
+   set of spots and you get a different region's climatology for free — the
+   machinery already supports it.
+
+3. **The scoring curves are Florida-shaped**, and this is the real work.
+   `HEIGHT_CURVE`, `PERIOD_CURVE` and `WIND_PENALTY_CURVE` in `scoring.py` are
+   named constants precisely so a second region can supply its own.
+
+### Why the curves matter more than the spot list
+
+Westport, WA has a **median** day of 4.72ft and a p90 of 9.32ft, against
+Florida's 1.31ft and 2.82ft. Its biggest day on record is 22.4ft; Florida's is
+7.4ft. Fed to the Florida height curve, the ordering inverts:
+
+| Westport day | ft | Florida height score |
+|---|---|---|
+| small (p10) | 2.2 | 5.7 |
+| median (p50) | 4.7 | **9.8** |
+| big (p90) | 9.3 | **6.6** |
+| huge (p99) | 14.4 | 3.8 |
+
+A typical day scores higher than a genuinely big one, because the curve encodes
+"Florida sandbar" rather than "wave." Scored against Florida's *climatology* it
+is worse still — an ordinary Westport Tuesday reads as `BEST IN 5YR`, so the
+sigma term pins high and stops discriminating between days entirely.
+
+A Pacific Northwest curve would peak somewhere near 8–12ft. That is a local
+surfer's judgement, not a coding problem.
+
+Note this is an argument for keeping rarity **monotonic** in height
+(`APPLY_CLOSEOUT_ROLLOFF = False`): a rarity score that does not bake in a
+closeout assumption travels between coasts far better than an absolute curve
+that does.
 
 ---
 
