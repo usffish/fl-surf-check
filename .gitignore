@@ -21,3 +21,7 @@ htmlcov/
 
 # cached statewide historical baseline (rebuilt every 30 days)
 .fl_surf_climatology.json
+
+# personal surf log - your sessions, not project content
+.fl_surf_log.json
+fl_surf_log.json

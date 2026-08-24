@@ -42,6 +42,7 @@ Use `--days 5` to plan a weekend rather than an afternoon.
 - [Planning several days ahead](#planning-several-days-ahead)
 - [Which hour it scores](#which-hour-it-scores)
 - [Rarity: is today one of the good ones?](#rarity-is-today-one-of-the-good-ones)
+- [Your surf log](#your-surf-log)
 - [Thunderstorms](#thunderstorms)
 - [Tuning it to how you actually surf](#tuning-it-to-how-you-actually-surf)
 - [Data sources](#data-sources)
@@ -100,6 +101,12 @@ python -m fl_surf_check --zip ZIP [options]
 | `--days`, `-d` | `1` | How many days ahead to consider (1–7). |
 | `--rare-only` | off | Show only spots having an unusually good day, judged against the full history. |
 | `--no-tides` | off | Skip NOAA tide lookups. Faster; tide is a minor input. |
+| `--surfed` | — | Record a session and exit. Fuzzy-matched, so `apollo` works. |
+| `--on` | today | Date for `--surfed`, as `YYYY-MM-DD`. |
+| `--log-path` | `$FL_SURF_LOG` | Where the surf log lives (default `~/.fl_surf_log.json`). |
+| `--itch-rate` | `0.05` | σ gained per day since your last session. |
+| `--novelty-weight` | `0.5` | How hard to handicap spots you surf often. `0` disables. |
+| `--no-personal` | off | Ignore the surf log for this run. |
 | `--no-history` | off | Skip the statewide historical baseline. `VALUE` and `VS NORM` fall back to `-`. |
 | `--refresh-history` | off | Force-rebuild the cached baseline. Rarely needed — it refreshes itself every 30 days. |
 
@@ -456,6 +463,86 @@ drive time is already the honest cost.
 
 ---
 
+## Your surf log
+
+Two factors no forecast can supply. Both read from a personal log and are
+**zero until you record a session**, so this is inert until you opt in.
+
+```bash
+python -m fl_surf_check --surfed "apollo"                  # today
+python -m fl_surf_check --surfed "ponce" --on 2026-08-18
+```
+
+Names are fuzzy-matched, and an unrecognised one is **refused rather than
+guessed** — a wrong guess silently logs a session against the wrong break and
+quietly skews everything downstream. The log is a JSON file at
+`~/.fl_surf_log.json` (override with `$FL_SURF_LOG`), written atomically,
+outside the repo and gitignored: it is a record of where you go and when, which
+does not belong in a public repository.
+
+The full formula becomes:
+
+```
+value = sigma(surf) + itch - novelty - drive_minutes / minutes_per_sd
+```
+
+### Itch — days since you last surfed
+
+Linear and **uncapped**, at `--itch-rate` σ per day:
+
+```
+ 3 days   +0.15σ   +18 min      30 days   +1.50σ   +180 min
+ 7 days   +0.35σ   +42 min      45 days   +2.25σ   +270 min
+```
+
+**This never changes the ranking.** It is identical for every spot, so it
+slides the whole board and moves the go/no-go line without reordering anything
+— which is exactly "make me more willing to drive", not "send me somewhere
+different".
+
+Because it is uncapped, it grows without limit if the log goes stale. That is
+right for a real dry spell and is also the failure mode of *forgetting to log*.
+An empty log is deliberately treated as **zero itch, not infinite** — a fresh
+install should not open by demanding you drive across the state.
+
+### Novelty — how often you have surfed each spot
+
+A z-score of visit counts across the whole spot list, so spots you keep
+returning to get handicapped and neglected ones surface. **This one does
+reorder.** Uncapped, at `--novelty-weight`.
+
+Two corrections to a plain z-score, both for measured reasons:
+
+**Log-transform first.** Visit counts across 41 spots are extremely
+zero-inflated, and the raw z-score of a heavily-used spot runs away. On a
+realistic 200-session log, raw counts penalise the most-surfed spot **1.7×
+harder** than log space does. In log space, equal *ratios* of visits cost
+equal increments — 1→10 costs about what 10→100 costs.
+
+**Shrink by evidence.** Even in log space, a young log produces huge z values
+simply because almost everything is zero: measured, a single logged session has
+a raw z of **+6.3**, which at 120 min/σ is a *twelve-hour* handicap from one
+surf. Scaling by `n / (n + 20)` — the same Laplace pattern as
+`shrink_percentile` — keeps a three-session log quiet while a two-hundred-session
+one applies at nearly full strength.
+
+```
+sessions logged     most-surfed spot      never-surfed
+      1                 +0.15σ   +18min       −0.00σ
+     10 / 3 spots       +0.82σ   +98min       −0.04σ
+     60 / 6 spots       +1.37σ  +164min       −0.15σ
+```
+
+### The honest caveat
+
+Both factors are worth exactly as much as your logging discipline. An unlogged
+session is invisible: novelty will think you have never surfed a spot you go to
+weekly, and itch will keep climbing as though you have been dry. Nothing here
+can detect that — `--no-personal` turns the whole thing off if the log drifts
+out of date.
+
+---
+
 ## Thunderstorms
 
 Rain doesn't stop anyone surfing. Lightning does — and a surfer is the tallest
@@ -640,13 +727,15 @@ fl_surf_check/
 ├── distance.py     # Great-circle + OSRM driving distance, decay function
 ├── conditions.py   # Open-Meteo + NOAA fetching, batched and cached
 ├── climatology.py  # Full-record statewide swell baseline, pooled and cached on disk
+├── surflog.py      # Your session log; feeds the itch and novelty factors
 ├── scoring.py      # All the scoring math (pure functions, no I/O)
 └── cli.py          # argparse, orchestration, table rendering
 
 tests/
 ├── test_scoring.py       # 32 tests on the scoring math
 ├── test_climatology.py   # 69 tests on baselines, rarity, value, storms, daylight
-└── test_cli_offline.py   # 11 end-to-end tests with the network mocked
+├── test_surflog.py       # 28 tests on the surf log, itch and novelty
+└── test_cli_offline.py   # 23 end-to-end tests with the network mocked
 ```
 
 `scoring.py` contains no I/O at all, which is why it's the easiest part to test
@@ -662,10 +751,10 @@ python -m pytest tests/ -q
 ```
 
 ```
-115 passed in 1.48s
+152 passed in 3.49s
 ```
 
-All 115 tests run **offline** — network calls are mocked and `build_baseline`
+All 152 tests run **offline** — network calls are mocked and `build_baseline`
 takes an injectable client — so the suite is fast and works in CI. They cover
 the scoring curves (monotonicity, bounds, continuity, Florida-specific tuning),
 the distance decay math, the worth-the-drive blend (including that an epic far

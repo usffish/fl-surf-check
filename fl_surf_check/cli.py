@@ -14,6 +14,7 @@ import sys
 import requests
 
 from .climatology import is_daylight, load_baseline
+from .surflog import LOG_ENV_VAR, load_log, record_session, resolve_spot_name
 from .conditions import (
     MAX_FORECAST_DAYS,
     Conditions,
@@ -26,7 +27,11 @@ from .scoring import (
     MINUTES_PER_SIGMA,
     drive_allowance_minutes,
     effective_drive,
+    ITCH_RATE_PER_DAY,
+    NOVELTY_WEIGHT,
     effective_sigma,
+    itch_bonus,
+    novelty_penalties,
     pick_best_hour,
     rarity_score,
     score_conditions,
@@ -99,6 +104,30 @@ examples:
                         help="Force-rebuild the cached historical baselines.")
     parser.add_argument("--no-tides", action="store_true",
                         help="Skip NOAA tide lookups (faster; tide is a minor scoring input).")
+
+    personal = parser.add_argument_group(
+        "your surf log",
+        "Two factors the forecast cannot supply, both read from a personal log "
+        f"(~/.fl_surf_log.json, or ${LOG_ENV_VAR}). Zero until you log a session.")
+    personal.add_argument("--surfed", metavar="SPOT", default=None,
+                          help="Record a surf session and exit. Spot name is fuzzy-matched, "
+                               "so \"apollo\" finds \"Apollo Beach (Canaveral NS)\".")
+    personal.add_argument("--on", metavar="YYYY-MM-DD", default=None,
+                          help="Date for --surfed (default: today).")
+    personal.add_argument("--log-path", default=None,
+                          help=f"Override the surf log location (default: ${LOG_ENV_VAR} "
+                               "or ~/.fl_surf_log.json).")
+    personal.add_argument("--itch-rate", type=float, default=ITCH_RATE_PER_DAY,
+                          help=f"Sigma gained per day since your last session "
+                               f"(default: {ITCH_RATE_PER_DAY:g}). Uncapped: at the default "
+                               f"exchange rate a week out of the water is worth ~42 min of "
+                               f"extra driving. Same for every spot, so it moves the "
+                               f"go/no-go line without reordering.")
+    personal.add_argument("--novelty-weight", type=float, default=NOVELTY_WEIGHT,
+                          help=f"How hard to handicap spots you surf often "
+                               f"(default: {NOVELTY_WEIGHT:g}). Uncapped. 0 disables it.")
+    personal.add_argument("--no-personal", action="store_true",
+                          help="Ignore the surf log entirely for this run.")
     return parser
 
 
@@ -158,6 +187,14 @@ def gather(origin, args):
         import numpy as _np
         return bool(is_daylight(_np.array([float(ts)]), lat, lon)[0])
 
+    # Personal factors from the surf log. Both are zero without one, so this
+    # is a no-op for anyone who has never logged a session.
+    surf_log = load_log(args.log_path)
+    itch = 0.0 if args.no_personal else itch_bonus(
+        surf_log.days_since_last(), rate_per_day=args.itch_rate)
+    novelty = {} if args.no_personal else novelty_penalties(
+        surf_log.visit_counts([s.name for s in spots]), weight=args.novelty_weight)
+
     rows = []
     for spot in spots:
         readings = conditions.get(spot.name) or [(0, Conditions())]
@@ -179,7 +216,8 @@ def gather(origin, args):
             sigma = min(sigma, 0.0)
 
         value = value_score(sigma, drive.duration_minutes,
-                            minutes_per_sigma=args.minutes_per_sd)
+                            minutes_per_sigma=args.minutes_per_sd,
+                            itch=itch, novelty=novelty.get(spot.name, 0.0))
 
         # Legacy blend, kept only for --no-history where there is no sigma.
         close = closeness_factor(drive.distance_miles, args.decay_miles)
@@ -190,8 +228,10 @@ def gather(origin, args):
             "spot": spot, "conditions": cond, "drive": drive,
             "surf": surf, "worth": worth, "rarity": rare, "storm": risk,
             "value": value, "best_hour": pick,
+            "visits": surf_log.visit_counts([spot.name])[spot.name],
         })
-    return rows
+    rows_meta = {"log": surf_log, "itch": itch}
+    return rows, rows_meta
 
 
 def filter_and_sort(rows, args):
@@ -287,11 +327,12 @@ def _bar(score: float, width: int = 10) -> str:
     return "#" * filled + "." * (width - filled)
 
 
-def render(rows, origin, args) -> str:
+def render(rows, origin, args, meta=None) -> str:
     lines = []
     lines.append("")
     lines.append(f"  Florida surf check  -  from {origin.label}")
-    lines.append(f"  {len(rows)} spots shown, ranked by whether they're worth the drive")
+    lines.append(f"  {len(rows)} spot{'s' if len(rows) != 1 else ''} shown, "
+                 f"ranked by whether they're worth the drive")
     if getattr(args, "days", 1) > 1:
         lines.extend(_day_summary(rows, args))
 
@@ -322,6 +363,24 @@ def render(rows, origin, args) -> str:
                 f"any time of year   [{rr.label()}]"
             )
         lines.append("  " + "=" * 92)
+
+    itch = meta.get("itch", 0.0) if meta else 0.0
+    log = meta.get("log") if meta else None
+    if log is not None and log.total_sessions():
+        if args.no_personal:
+            n = log.total_sessions()
+            lines.append(f"  {n} session{'s' if n != 1 else ''} logged, "
+                         f"ignored for this run (--no-personal)")
+        else:
+            since = log.days_since_last()
+            n = log.total_sessions()
+            bits = [f"{n} session{'s' if n != 1 else ''} logged"]
+            if since is not None:
+                bits.append(f"last surfed {since}d ago")
+            if abs(itch) > 1e-9:
+                bits.append(
+                    f"itch {itch:+.2f} to every spot ({itch*args.minutes_per_sd:+.0f} min)")
+            lines.append("  " + " · ".join(bits))
 
     lines.append("  " + "-" * 92)
     lines.append(
@@ -382,6 +441,16 @@ def render(rows, origin, args) -> str:
                         extra += f", {c.precip_probability:.0f}% precip"
                     extra += ")"
                 lines.append(f"      (!) {warn}{extra}")
+            if val.total is not None and val.has_personal:
+                parts = [f"sigma {val.sigma:+.2f}"]
+                if abs(val.itch) > 1e-9:
+                    parts.append(f"itch {val.itch:+.2f}")
+                if abs(val.novelty) > 1e-9:
+                    parts.append(
+                        f"novelty {-val.novelty:+.2f} ({r['visits']} "
+                        f"visit{'s' if r['visits'] != 1 else ''})")
+                parts.append(f"drive {-val.drive_cost:.2f}")
+                lines.append("      personal: " + "  ".join(parts))
             if val.total is not None:
                 margin = val.margin_minutes()
                 verb = "still worth it with" if margin >= 0 else "short by"
@@ -403,17 +472,30 @@ def render(rows, origin, args) -> str:
         f"  BEST = the best surfable hour in the next {args.days * 24}h; all figures "
         f"are for that hour."
     )
-    lines.append(
-        f"  VALUE = surf (in SDs above normal) minus drive time, at "
-        f"{args.minutes_per_sd:g} min per SD.  Positive = worth going."
-    )
+    if any(r["value"].has_personal for r in rows):
+        lines.append(
+            f"  VALUE = surf (SDs above normal) + itch - novelty - drive time, at "
+            f"{args.minutes_per_sd:g} min per SD.  Positive = worth going."
+        )
+        lines.append(
+            "          itch rises with days since you last surfed and lifts every spot "
+            "equally;"
+        )
+        lines.append(
+            "          novelty handicaps spots you surf often. --details shows both."
+        )
+    else:
+        lines.append(
+            f"  VALUE = surf (in SDs above normal) minus drive time, at "
+            f"{args.minutes_per_sd:g} min per SD.  Positive = worth going."
+        )
     if any(r["rarity"].percentile is not None for r in rows):
         lines.append(
             "  VS NORM = percentile (and geometric SDs) against ALL Florida spots' swell "
             "history, pooled across the full record;"
         )
         lines.append(
-            f"            COST = the drive in those same units. VALUE = VS NORM sigma + COST."
+            "            COST = the drive in those same units."
         )
         lines.append(
             "            (marine record starts Oct 2021; thin baselines shrink toward normal.)"
@@ -422,6 +504,38 @@ def render(rows, origin, args) -> str:
         lines.append("  ~ = straight-line distance estimate (routing server unreachable).")
     lines.append("")
     return "\n".join(lines)
+
+
+def _handle_surfed(args) -> int:
+    """Record a session from --surfed and report the resulting log state."""
+    import datetime as _dt
+
+    names = [s.name for s in SPOTS]
+    matched = resolve_spot_name(args.surfed, names)
+    if matched is None:
+        print(f"error: no spot matches {args.surfed!r}.", file=sys.stderr)
+        print("       Try a distinctive word - 'apollo', 'sebastian', 'clearwater'.",
+              file=sys.stderr)
+        return 2
+
+    when = _dt.date.today()
+    if args.on:
+        try:
+            when = _dt.date.fromisoformat(args.on)
+        except ValueError:
+            print(f"error: --on must be YYYY-MM-DD, got {args.on!r}", file=sys.stderr)
+            return 2
+        if when > _dt.date.today():
+            print(f"error: {when} is in the future", file=sys.stderr)
+            return 2
+
+    log = record_session(matched, on=when, path=args.log_path)
+    visits = log.visit_counts([matched])[matched]
+    print(f"  logged: {matched} on {when:%a %d %b %Y}")
+    print(f"  that's {visits} session{'s' if visits != 1 else ''} there, "
+          f"{log.total_sessions()} total")
+    print(f"  {log.path}")
+    return 0
 
 
 def main(argv=None) -> int:
@@ -434,6 +548,11 @@ def main(argv=None) -> int:
     if not 0.0 <= args.surf_weight <= 1.0:
         print("error: --surf-weight must be between 0 and 1", file=sys.stderr)
         return 2
+
+    # Logging a session is a local, offline operation - handle it before any
+    # geocoding or network work, so `--surfed` needs no zip and no internet.
+    if args.surfed is not None:
+        return _handle_surfed(args)
 
     zip_code = args.zip_code or os.environ.get(ZIP_ENV_VAR)
     if not zip_code:
@@ -450,7 +569,7 @@ def main(argv=None) -> int:
     print(f"  Checking {len(SPOTS)} Florida spots...", file=sys.stderr)
 
     try:
-        rows = gather(origin, args)
+        rows, meta = gather(origin, args)
     except KeyboardInterrupt:
         print("\ninterrupted", file=sys.stderr)
         return 130
@@ -468,7 +587,7 @@ def main(argv=None) -> int:
             print("\n  No spots matched your filters. Try relaxing --max-miles or --min-score.\n")
         return 0
 
-    print(render(rows, origin, args))
+    print(render(rows, origin, args, meta))
     return 0
 
 

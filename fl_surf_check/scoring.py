@@ -772,11 +772,16 @@ def storm_blocks_travel(risk: str) -> bool:
 @dataclass
 class ValueScore:
     """The worth-the-drive calculation, in standard deviations of surf."""
-    total: float | None          # sigma minus the cost of the drive
+    total: float | None          # sigma plus itch minus novelty minus drive cost
     sigma: float | None          # surf quality, in SDs above normal
     drive_cost: float            # drive expressed in the same units
     drive_minutes: float
     verdict: str
+    #: Personal adjustments from the surf log, both in sigma. Zero when no log
+    #: exists, which is the honest default - a fresh install knows nothing
+    #: about the user and should not pretend otherwise.
+    itch: float = 0.0            # + : longer since surfing, more willing to drive
+    novelty: float = 0.0         # + : surfed here often, handicap it
 
     @property
     def worth_it(self) -> bool:
@@ -788,19 +793,34 @@ class ValueScore:
             return None
         return self.total * MINUTES_PER_SIGMA
 
+    @property
+    def has_personal(self) -> bool:
+        """True when the surf log actually moved this score."""
+        return abs(self.itch) > 1e-9 or abs(self.novelty) > 1e-9
+
 
 def value_score(
     sigma: float | None,
     drive_minutes: float,
     minutes_per_sigma: float = MINUTES_PER_SIGMA,
+    itch: float = 0.0,
+    novelty: float = 0.0,
 ) -> ValueScore:
     """
-    Score a spot as surf quality minus the cost of getting there.
+    Score a spot as surf quality, adjusted for you, minus the cost of getting
+    there:
+
+        value = sigma + itch - novelty - drive_minutes / minutes_per_sigma
 
     `sigma` is how many standard deviations above normal the surf is, from
     rarity_score. It is deliberately climatological rather than relative to the
     other spots today: on a flat day every spot should score badly, which a
     cross-sectional z-score could never express because it always has a winner.
+
+    `itch` and `novelty` come from the surf log and are zero without one. Note
+    they behave differently: itch is the SAME for every spot, so it slides the
+    whole board and moves the go/no-go line without reordering anything.
+    Novelty is per-spot, so it genuinely reorders.
     """
     if minutes_per_sigma <= 0:
         cost = 0.0
@@ -808,10 +828,12 @@ def value_score(
         cost = max(0.0, drive_minutes) / minutes_per_sigma
 
     if sigma is None:
-        return ValueScore(None, None, cost, drive_minutes, "no baseline - rarity unavailable")
+        return ValueScore(None, None, cost, drive_minutes,
+                          "no baseline - rarity unavailable", itch, novelty)
 
-    total = sigma - cost
-    return ValueScore(total, sigma, cost, drive_minutes, _value_verdict(total, sigma))
+    total = sigma + itch - novelty - cost
+    return ValueScore(total, sigma, cost, drive_minutes,
+                      _value_verdict(total, sigma), itch, novelty)
 
 
 def _value_verdict(total: float, sigma: float) -> str:
@@ -934,3 +956,107 @@ def pick_best_hour(readings, spot, baseline, is_daylight_fn, local_date_fn=None)
     return BestHour(chosen.time, chosen.conditions, chosen.surf, chosen.rarity,
                     chosen.sigma, considered,
                     {d: e for d, (_, e) in per_day.items()})
+
+
+# ---------------------------------------------------------------------------
+# Personal factors, from the surf log
+# ---------------------------------------------------------------------------
+#
+# Two adjustments that no forecast can supply, both expressed in sigma so they
+# trade directly against drive time like everything else:
+#
+#     value = sigma + itch - novelty - drive_minutes / minutes_per_sigma
+#
+# Neither is capped, by choice. That makes the weight the only control, so the
+# constants below carry more responsibility than a bounded version would - see
+# the notes on each.
+
+#: Sigma gained per day since the last logged session. Unbounded and linear:
+#: a week out of the water is worth ~42 minutes of extra driving at the default
+#: 120 min/sigma, a month ~3 hours.
+#:
+#: Because there is no ceiling, this grows without limit if the log goes stale.
+#: That is the intended behaviour for a real dry spell, but it is also the
+#: failure mode of forgetting to log: after a year of unlogged sessions the
+#: tool would insist on an 18-hour drive. `days_since_last` returning None for
+#: an empty log is deliberately treated as zero itch rather than infinite.
+ITCH_RATE_PER_DAY = 0.05
+
+#: Multiplier on the visit z-score. Unbounded, so a heavily-surfed spot can end
+#: up several sigma down: measured on a realistic 60-session log this puts the
+#: most-visited spot ~1.4 sigma (about 2h45m of driving) behind an unvisited
+#: one at the default weight.
+NOVELTY_WEIGHT = 0.5
+
+#: Laplace-style prior, in "virtual sessions", damping the novelty z-score when
+#: the log is young. Same mechanism as RARITY_PRIOR_DAYS: with three sessions
+#: recorded your history cannot support a strong claim about your preferences,
+#: so it barely moves anything. This is a confidence weight, not a cap - it
+#: scales the z toward zero on thin evidence but never bounds it once the log
+#: is mature.
+NOVELTY_PRIOR_SESSIONS = 20.0
+
+
+def itch_bonus(days_since_last: int | None,
+               rate_per_day: float = ITCH_RATE_PER_DAY) -> float:
+    """
+    Sigma earned by not having surfed lately. Linear and unbounded.
+
+    None (an empty log) means "unknown", not "forever", and returns zero: a
+    fresh install should not open by insisting the user drive across the state.
+    """
+    if days_since_last is None or days_since_last <= 0:
+        return 0.0
+    return days_since_last * rate_per_day
+
+
+def novelty_penalties(
+    visit_counts: dict,
+    weight: float = NOVELTY_WEIGHT,
+    prior_sessions: float = NOVELTY_PRIOR_SESSIONS,
+) -> dict:
+    """
+    Per-spot handicap from how often each spot has been surfed, as a z-score
+    across the whole spot list. Positive means "surfed more than typical, make
+    it work harder"; negative is a small bonus for the neglected ones.
+
+    Two corrections to a plain z-score of the raw counts, both for measured
+    reasons rather than taste:
+
+    1. LOG FIRST. Visit counts across 41 spots are extremely zero-inflated -
+       most spots are zero and a few are not - so a raw z-score treats any
+       nonzero entry as an extreme outlier. Measured on a one-session log, the
+       raw z of that single visit is +6.3, which at 120 min/sigma is a
+       twelve-hour handicap from one surf. This is the same right-skew problem
+       that made raw z-scores wrong for swell height, and it has the same fix.
+
+    2. SHRINK BY EVIDENCE. Even in log space, a young log produces large z
+       values simply because almost everything is zero. Scaling by
+       n/(n + prior) means a three-session log barely registers while a
+       two-hundred-session one applies at nearly full strength.
+
+    The result is deliberately NOT bounded: once the log is mature the z is
+    passed through at `weight`, however large it gets.
+    """
+    names = list(visit_counts)
+    if not names:
+        return {}
+
+    counts = [float(visit_counts[n]) for n in names]
+    total = sum(counts)
+    if total <= 0:
+        return {n: 0.0 for n in names}
+
+    # Plain-Python stats: scoring.py has no numpy dependency and stays that way.
+    logged = [math.log1p(c) for c in counts]
+    mean = sum(logged) / len(logged)
+    variance = sum((x - mean) ** 2 for x in logged) / len(logged)
+    sd = math.sqrt(variance)
+    if sd <= 0:  # every spot surfed exactly the same number of times
+        return {n: 0.0 for n in names}
+
+    confidence = total / (total + prior_sessions)
+    return {
+        n: weight * ((logged[i] - mean) / sd) * confidence
+        for i, n in enumerate(names)
+    }

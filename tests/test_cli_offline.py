@@ -6,6 +6,7 @@ touching Open-Meteo, NOAA or OSRM - so it runs in CI, offline, and instantly.
 """
 
 import datetime as dt
+import math
 import random
 from unittest import mock
 from zoneinfo import ZoneInfo
@@ -51,14 +52,26 @@ def _fake_tide(station, tz="America/New_York", session=None, hours=48):
 
 
 def _fake_baseline(spots, **kwargs):
-    """One deterministic statewide baseline; never touches the network."""
+    """
+    One deterministic statewide baseline; never touches the network.
+
+    The log-space stats are NOT optional decoration: without them
+    Baseline.height_sigma returns None, effective_sigma returns None, and the
+    whole value score collapses to None - silently falling back to the legacy
+    blend and leaving the real ranking path untested. They are set to values
+    consistent with the percentile curves above.
+    """
     return Baseline(
         height_p=tuple(0.2 + 0.06 * q for q in Baseline.LEVELS),   # 0.2ft -> 6.2ft
         period_p=tuple(3.0 + 0.09 * q for q in Baseline.LEVELS),   # 3s -> 12s
         n_days=145,
         n_years=5,
-        n_observations=145 * 26,
-        n_spots=26,
+        n_observations=145 * 41,
+        n_spots=41,
+        log_height_mean=math.log(1.5),
+        log_height_sd=0.62,
+        log_period_mean=math.log(7.2),
+        log_period_sd=0.32,
     )
 
 
@@ -109,22 +122,47 @@ def test_min_score_filters(offline, capsys):
     assert "No spots matched" in out or "spots shown" in out
 
 
-def test_results_are_sorted_by_worth_descending(offline):
+def test_results_are_sorted_by_value_descending(offline):
+    """
+    Ranking is on the value score, not the legacy blend. This test used to
+    assert `worth` was descending and passed only because the fixture's
+    baseline lacked log stats, so every sigma was None and the code silently
+    fell back to that blend.
+    """
     args = cli.build_parser().parse_args(["--zip", "32118", "--top", "0"])
-    rows = cli.filter_and_sort(cli.gather(ORIGIN, args), args)
-    totals = [r["worth"].total for r in rows]
+    rows, _ = cli.gather(ORIGIN, args)
+    rows = cli.filter_and_sort(rows, args)
+    totals = [r["value"].total for r in rows]
+    assert all(t is not None for t in totals), "value score should be live here"
     assert totals == sorted(totals, reverse=True)
 
 
-def test_surf_weight_changes_the_ranking(offline):
-    """Sanity check that the distance normalization actually does something."""
+def test_surf_weight_only_affects_the_no_history_fallback(offline):
+    """
+    --surf-weight belongs to the legacy blend, which now only runs when there
+    is no baseline. With one present it must NOT change the ranking - the
+    value score does not consult it.
+    """
     base = cli.build_parser().parse_args(["--zip", "32118", "--top", "0"])
-    quality_only = cli.build_parser().parse_args(
-        ["--zip", "32118", "--top", "0", "--surf-weight", "1.0"]
-    )
-    a = [r["spot"].name for r in cli.filter_and_sort(cli.gather(ORIGIN, base), base)]
-    b = [r["spot"].name for r in cli.filter_and_sort(cli.gather(ORIGIN, quality_only), quality_only)]
-    assert a != b, "distance weighting had no effect on ordering"
+    weighted = cli.build_parser().parse_args(
+        ["--zip", "32118", "--top", "0", "--surf-weight", "1.0"])
+    rows_a, _ = cli.gather(ORIGIN, base)
+    rows_b, _ = cli.gather(ORIGIN, weighted)
+    a = [r["spot"].name for r in cli.filter_and_sort(rows_a, base)]
+    b = [r["spot"].name for r in cli.filter_and_sort(rows_b, weighted)]
+    assert a == b, "surf-weight should be inert while a baseline exists"
+
+
+def test_minutes_per_sd_changes_the_ranking(offline):
+    """The live equivalent: the exchange rate does move the order."""
+    base = cli.build_parser().parse_args(["--zip", "32118", "--top", "0"])
+    generous = cli.build_parser().parse_args(
+        ["--zip", "32118", "--top", "0", "--minutes-per-sd", "600"])
+    rows_a, _ = cli.gather(ORIGIN, base)
+    rows_b, _ = cli.gather(ORIGIN, generous)
+    a = [r["spot"].name for r in cli.filter_and_sort(rows_a, base)]
+    b = [r["spot"].name for r in cli.filter_and_sort(rows_b, generous)]
+    assert a != b, "drive-time exchange rate had no effect on ordering"
 
 
 def test_invalid_surf_weight_rejected():
@@ -223,3 +261,110 @@ def test_missing_zip_explains_both_options(capsys, monkeypatch):
     assert cli.main(["--top", "2"]) == 2
     err = capsys.readouterr().err
     assert "--zip" in err and cli.ZIP_ENV_VAR in err
+
+
+# --- the surf log, end to end through the CLI -------------------------------
+
+def test_surfed_logs_a_session_without_network_or_zip(tmp_path, capsys):
+    """
+    --surfed is a local operation: it must work with no zip, no internet and
+    no mocking, because it runs before any of that.
+    """
+    p = str(tmp_path / "log.json")
+    assert cli.main(["--surfed", "apollo", "--on", "2026-08-10", "--log-path", p]) == 0
+    out = capsys.readouterr().out
+    assert "Apollo Beach (Canaveral NS)" in out
+    from fl_surf_check.surflog import load_log
+    assert load_log(p).total_sessions() == 1
+
+
+def test_surfed_rejects_an_unmatchable_spot(tmp_path, capsys):
+    p = str(tmp_path / "log.json")
+    assert cli.main(["--surfed", "zzzz nowhere", "--log-path", p]) == 2
+    assert "no spot matches" in capsys.readouterr().err
+
+
+def test_surfed_rejects_a_future_date(tmp_path, capsys):
+    p = str(tmp_path / "log.json")
+    assert cli.main(["--surfed", "ponce", "--on", "2099-01-01", "--log-path", p]) == 2
+    assert "future" in capsys.readouterr().err
+
+
+def test_surfed_rejects_a_malformed_date(tmp_path, capsys):
+    p = str(tmp_path / "log.json")
+    assert cli.main(["--surfed", "ponce", "--on", "last tuesday", "--log-path", p]) == 2
+    assert "YYYY-MM-DD" in capsys.readouterr().err
+
+
+def test_run_without_a_log_is_unaffected(offline, capsys, tmp_path):
+    """The overwhelmingly common case: no log yet, nothing changes."""
+    cli.main(["--zip", "32118", "--top", "3", "--log-path", str(tmp_path / "none.json")])
+    out = capsys.readouterr().out
+    assert "sessions logged" not in out
+    assert "Florida surf check" in out
+
+
+def test_no_personal_ignores_an_existing_log(offline, capsys, tmp_path):
+    p = str(tmp_path / "log.json")
+    cli.main(["--surfed", "ponce", "--log-path", p])
+    capsys.readouterr()
+    cli.main(["--zip", "32118", "--top", "3", "--log-path", p, "--no-personal"])
+    out = capsys.readouterr().out
+    assert "ignored for this run" in out
+
+
+def test_logged_sessions_penalise_that_spot_relative_to_others(offline, tmp_path):
+    """
+    The whole point of novelty: surfing a spot repeatedly should cost it ground
+    against untouched ones.
+
+    Asserted as a change in the GAP rather than a change in rank. Whether the
+    leader is actually displaced depends on how far ahead it was to begin with,
+    which is a property of the fixture's random conditions, not of the feature.
+    The gap closing is the real guarantee.
+    """
+    p = str(tmp_path / "log.json")
+
+    def values():
+        args = cli.build_parser().parse_args(
+            ["--zip", "32118", "--top", "0", "--log-path", p])
+        rows, _ = cli.gather(ORIGIN, args)
+        rows = cli.filter_and_sort(rows, args)
+        return rows, {r["spot"].name: r["value"].total for r in rows}
+
+    rows, before = values()
+    leader = rows[0]["spot"].name
+    runner_up = rows[1]["spot"].name
+    gap_before = before[leader] - before[runner_up]
+
+    for _ in range(12):
+        cli.main(["--surfed", leader, "--log-path", p])
+
+    _, after = values()
+    gap_after = after[leader] - after[runner_up]
+
+    assert after[leader] < before[leader], "surfing it should lower its own score"
+    assert gap_after < gap_before, (
+        f"gap to {runner_up} was {gap_before:+.2f} and is now {gap_after:+.2f}"
+    )
+
+
+def test_novelty_eventually_displaces_a_leader(offline, tmp_path):
+    """
+    With enough sessions the handicap should be big enough to actually reorder,
+    not merely narrow the gap.
+    """
+    p = str(tmp_path / "log.json")
+    args = cli.build_parser().parse_args(
+        ["--zip", "32118", "--top", "0", "--log-path", p])
+    rows, _ = cli.gather(ORIGIN, args)
+    leader = cli.filter_and_sort(rows, args)[0]["spot"].name
+
+    for _ in range(150):
+        cli.main(["--surfed", leader, "--log-path", p])
+
+    args2 = cli.build_parser().parse_args(
+        ["--zip", "32118", "--top", "0", "--log-path", p])
+    rows2, _ = cli.gather(ORIGIN, args2)
+    after = [r["spot"].name for r in cli.filter_and_sort(rows2, args2)]
+    assert after[0] != leader, f"{leader} survived 150 logged sessions there"
