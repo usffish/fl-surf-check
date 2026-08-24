@@ -153,10 +153,20 @@ def test_novelty_is_zero_for_an_empty_log():
     assert all(v == 0.0 for v in pens.values())
 
 
-def test_novelty_is_zero_when_every_spot_is_equal():
-    """A flat column has no spread to z-score; must not divide by zero."""
-    pens = novelty_penalties({n: 3 for n in NAMES})
-    assert all(v == 0.0 for v in pens.values())
+@pytest.mark.parametrize("count", [1, 3, 4, 23, 24, 25, 27, 30, 100])
+def test_novelty_is_zero_when_every_spot_is_equal(count):
+    """
+    A flat column has no spread to z-score and must yield zero.
+
+    Parametrised deliberately: the spread is mathematically zero but floating
+    point leaves sd near 1e-16 rather than on it, for some counts and not
+    others, and differently across platforms. CI failed on a value this
+    machine computed as exactly 0.0. Several of these counts produce a nonzero
+    sd locally and would give z = +-1.0 from rounding noise alone.
+    """
+    pens = novelty_penalties({n: count for n in NAMES})
+    assert all(v == 0.0 for v in pens.values()), \
+        f"flat column of {count} produced nonzero penalties"
 
 
 def test_novelty_penalises_visited_and_rewards_neglected():

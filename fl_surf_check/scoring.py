@@ -1052,7 +1052,14 @@ def novelty_penalties(
     mean = sum(logged) / len(logged)
     variance = sum((x - mean) ** 2 for x in logged) / len(logged)
     sd = math.sqrt(variance)
-    if sd <= 0:  # every spot surfed exactly the same number of times
+
+    # Tolerance, not `sd <= 0`. When every spot has the same count the spread
+    # is mathematically zero, but summing N identical floats and dividing
+    # leaves the mean off by ~1e-16, so sd lands near 1e-16 rather than on it -
+    # on some platforms and not others. Dividing by that produces z = +-1.0
+    # from pure rounding noise. Measured: 13 of the first 199 possible flat
+    # counts trip this locally, and CI caught a case that this machine did not.
+    if sd <= 1e-9 * max(1.0, abs(mean)):
         return {n: 0.0 for n in names}
 
     confidence = total / (total + prior_sessions)
