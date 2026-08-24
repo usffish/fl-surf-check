@@ -1,0 +1,274 @@
+<title>Florida surf spots — worth the drive from 33613</title>
+<style>
+  :root{
+    color-scheme: light;
+    --ground:#fbfcfd; --surface:#ffffff; --ink:#0d1115; --ink-2:#3f4a56; --muted:#68737f;
+    --hair:#e3e8ed; --rule:#eef2f6; --land:#eef1f4; --land-edge:#c9d2db; --sea:#f6f9fb;
+    --s1:#86b6ef; --s2:#5598e7; --s3:#2a78d6; --s4:#1c5cab; --s5:#0d366b;
+    --home:#eb6834;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:where(:not([data-theme="light"])){
+      color-scheme: dark;
+      --ground:#131619; --surface:#1a1e22; --ink:#eef2f5; --ink-2:#b7c1cb; --muted:#8d97a2;
+      --hair:#272c32; --rule:#22272c; --land:#20262c; --land-edge:#39434d; --sea:#171b1f;
+      --s1:#184f95; --s2:#256abf; --s3:#3987e5; --s4:#86b6ef; --s5:#cde2fb;
+      --home:#d95926;
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --ground:#131619; --surface:#1a1e22; --ink:#eef2f5; --ink-2:#b7c1cb; --muted:#8d97a2;
+    --hair:#272c32; --rule:#22272c; --land:#20262c; --land-edge:#39434d; --sea:#171b1f;
+    --s1:#184f95; --s2:#256abf; --s3:#3987e5; --s4:#86b6ef; --s5:#cde2fb;
+    --home:#d95926;
+  }
+  :root[data-theme="light"]{
+    color-scheme: light;
+    --ground:#fbfcfd; --surface:#ffffff; --ink:#0d1115; --ink-2:#3f4a56; --muted:#68737f;
+    --hair:#e3e8ed; --rule:#eef2f6; --land:#eef1f4; --land-edge:#c9d2db; --sea:#f6f9fb;
+    --s1:#86b6ef; --s2:#5598e7; --s3:#2a78d6; --s4:#1c5cab; --s5:#0d366b;
+    --home:#eb6834;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.6;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1060px;margin:0 auto;padding:56px 22px 88px;display:flex;flex-direction:column;gap:40px}
+  .eyebrow{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 12px}
+  h1{font-size:clamp(27px,4vw,38px);line-height:1.14;letter-spacing:-.021em;margin:0 0 14px;
+    text-wrap:balance;font-weight:640}
+  h2{font-size:19px;letter-spacing:-.012em;margin:0 0 4px;font-weight:640}
+  p{margin:0 0 12px;color:var(--ink-2);max-width:66ch}
+  p:last-child{margin-bottom:0}
+  .lede{font-size:16.5px}
+  strong{color:var(--ink);font-weight:620}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+  header{border-bottom:1px solid var(--hair);padding-bottom:30px}
+  .card{background:var(--surface);border:1px solid var(--hair);border-radius:12px;padding:14px}
+  .mapwrap{overflow-x:auto}
+  svg.map{display:block;width:100%;height:auto;min-width:640px}
+  .legend{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:12px 4px 2px;
+    font-size:12.5px;color:var(--muted)}
+  .ramp{display:flex;align-items:center;gap:0}
+  .ramp i{width:26px;height:11px;display:block}
+  .ramp i:first-child{border-radius:3px 0 0 3px}
+  .ramp i:last-child{border-radius:0 3px 3px 0}
+  .key{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:11px;height:11px;border-radius:50%;display:block;flex:none}
+  .cap{font-size:12.5px;color:var(--muted);margin:10px 2px 0;max-width:72ch}
+  .tablewrap{overflow-x:auto;border:1px solid var(--hair);border-radius:10px;background:var(--surface)}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:560px}
+  th,td{text-align:right;padding:8px 13px;border-bottom:1px solid var(--rule)}
+  th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}
+  thead th{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;
+    letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:500;
+    position:sticky;top:0;background:var(--surface)}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr.hot{background:color-mix(in srgb,var(--s3) 7%,transparent)}
+  td.num{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+  td .sw{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:-1px}
+  .tip{position:fixed;pointer-events:none;opacity:0;transition:opacity .1s;background:var(--surface);
+    color:var(--ink);border:1px solid var(--land-edge);border-radius:8px;padding:9px 11px;
+    font-size:12.5px;box-shadow:0 6px 20px rgba(0,0,0,.16);z-index:9;white-space:nowrap;max-width:280px}
+  .tip b{display:block;font-size:13px;margin-bottom:3px;color:var(--ink)}
+  .tip .k{color:var(--muted);font-size:11.5px}
+  .tip .v{font-family:ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;color:var(--ink)}
+  circle.spot{cursor:pointer;transition:opacity .12s}
+  circle.spot:hover{opacity:.75}
+  :focus-visible{outline:2px solid var(--s3);outline-offset:2px;border-radius:3px}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">fl-surf-check &middot; the spot list</p>
+  <h1>All 41 Florida surf spots</h1>
+  <p class="lede">
+    Shaded by how often each one is actually worth the drive &mdash; not raw surf quality,
+    but the tool's own <strong>value score</strong> (swell rarity, in standard deviations
+    above normal, minus the drive from&nbsp;33613 at 120&nbsp;min/&sigma;) run against
+    every day of the marine record, October&nbsp;2021 to August&nbsp;2026. Hover any spot
+    for its numbers.
+  </p>
+</header>
+
+<section>
+  <div class="card">
+    <div class="mapwrap"><svg class="map" id="map" role="img"
+      aria-label="Map of Florida showing 41 surf spots along the Atlantic and Gulf coasts, shaded by the share of days the tool's value score is positive when driving from Tampa zip code 33613, using one pooled statewide baseline covering the full historical record rather than a seasonal window. Apollo Beach on the East Central coast ranks highest at 19 percent; Jupiter Inlet has the best surf in the state but ranks low once its four-hour drive is priced in; nearby Gulf Coast spots with weak surf still rank respectably because the drive is under an hour."></svg></div>
+    <div class="legend">
+      <span class="key">share of days the value score was positive</span>
+      <span class="ramp" aria-hidden="true">
+        <i style="background:var(--s1)"></i><i style="background:var(--s2)"></i><i style="background:var(--s3)"></i><i style="background:var(--s4)"></i><i style="background:var(--s5)"></i>
+      </span>
+      <span class="mono">0%</span><span style="margin-left:-8px" class="mono">&rarr;</span><span class="mono">19%</span>
+      <span class="key" style="margin-left:8px"><span class="dot" style="background:var(--home)"></span>home &mdash; 33613</span>
+    </div>
+    <p class="cap">
+      Marker size and shade both carry the same value, so the ranking survives
+      greyscale and colour-blindness. The Keys are drawn but hold no spots &mdash;
+      they face the wrong way and sit behind the reef.
+    </p>
+    <p class="cap">
+      <strong>This map is specific to one origin, 33613 &mdash; the last one was not.</strong>
+      Everything here comes from the same formula the CLI runs: for every daylight hour in
+      the record, swell rarity (log-space standard deviations above <strong>one pooled
+      statewide baseline built from the full record</strong> &mdash; not a moving seasonal
+      window; that was removed on request, since a normal August day and a normal
+      February day are now judged against the same distribution) plus a wind adjustment,
+      maxed over each day, minus that spot's real OSRM drive time from Tampa at
+      120&nbsp;min/&sigma;. The vectorised version was checked against the live
+      <span class="mono">scoring.py</span> functions &mdash; using the actual cached
+      baseline, not a stand-in &mdash; and matched to six decimal places before this ran
+      across 41 spots &times; ~1,800 days each.
+    </p>
+  </div>
+</section>
+
+<section>
+  <h2>What changes once distance is priced in</h2>
+  <p>
+    <strong>The best surf in the state nearly disappears.</strong> Jupiter Inlet has the
+    best swell climate in Florida on the pooled record. Priced from Tampa at four hours
+    each way, it clears the value bar on just <strong>4.6%</strong> of days. Distance did
+    almost all of that work.
+  </p>
+  <p>
+    <strong>Apollo Beach takes over at the top &mdash; 18.8%.</strong> Not because it is
+    the best water (it isn't; Jupiter's is meaningfully better), but because the combination
+    of decent swell and a ~3-hour drive clears 120&nbsp;min/&sigma; more often than
+    anywhere further south does.
+  </p>
+  <p>
+    <strong>The Gulf spots hold their own on value even though their surf is weak.</strong>
+    Honeymoon Island (8.2%) and Clearwater (7.0%) rank ahead of Cocoa Beach, Fort Pierce,
+    Sebastian Inlet and every Palm Beach and Broward spot &mdash; all better surf, most of
+    them three-plus hours further away. A 55-minute drive needs far less swell to clear
+    the bar than a three-hour one, and the map shows it winning that trade repeatedly.
+  </p>
+  <p>
+    <strong>South Florida and the Panhandle both go dark.</strong> Miami-Dade, Broward and
+    the Panhandle spots round out the bottom &mdash; not because the surf is always bad
+    (Palm Beach and Boca Raton are respectable water) but because 4.5&ndash;8.5 hours is a
+    drive the value score essentially never clears at this rate.
+  </p>
+</section>
+
+<section>
+  <h2>Every spot</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr>
+        <th>Spot</th><th>Region</th><th>Drive</th><th>Travel days</th><th>Mean value</th><th>Best value</th>
+      </tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <p class="cap">
+    <span class="mono">Travel days</span> = share of the record where
+    <span class="mono">value = &sigma;(swell) &minus; drive&nbsp;min/120 &gt; 0</span>.
+    <span class="mono">Mean value</span> is that number averaged over every day, including
+    the days you would not go &mdash; a rough sense of how far under water a spot runs day
+    to day. <span class="mono">Best value</span> is the single best day on record for that
+    spot, at that drive time.
+  </p>
+</section>
+
+</div>
+<div class="tip" id="tip" role="status" aria-live="polite"></div>
+<script>
+const M = {"w":1000,"h":780,"paths":["M855.5 662.6L855.0 663.2L854.5 664.5L853.7 665.0L851.7 669.2L849.8 672.1L845.5 679.6L845.2 680.3L845.6 682.0L844.8 683.7L842.9 686.3L840.7 688.8L837.8 690.2L837.6 690.9L836.3 692.4L834.5 693.1L833.3 694.2L831.3 696.6L831.8 697.4L831.2 698.4L827.0 702.0L824.2 705.6L823.6 706.1L822.0 706.4L821.2 706.8L819.6 707.8L817.3 710.7L814.9 712.4L814.7 712.2L814.8 711.6L815.8 711.2L816.7 710.6L818.4 708.7L818.5 708.2L818.4 707.8L818.7 707.2L821.1 705.6L822.7 704.9L823.0 705.1L823.7 705.2L824.9 704.1L826.3 701.0L826.4 700.1L826.2 699.3L828.3 699.0L829.8 697.8L830.6 696.3L831.2 695.6L831.8 695.3L832.6 694.6L834.6 692.1L834.1 691.2L833.7 690.9L832.5 690.6L831.2 689.5L832.3 688.7L833.0 688.9L833.1 689.8L834.3 690.5L835.6 691.0L836.2 690.5L837.3 689.0L837.3 688.1L835.9 684.4L836.0 684.0L839.3 685.6L840.3 685.0L841.1 684.0L841.9 681.8L841.8 680.5L841.4 679.4L841.9 678.7L843.6 677.8L844.7 677.7L845.6 677.3L846.9 675.0L847.2 672.5L847.0 671.6L846.3 670.9L843.8 669.3L844.2 668.8L846.7 668.4L847.1 668.9L847.7 668.8L849.0 667.9L851.3 665.7L851.6 664.5L853.0 662.4L854.1 661.2L854.8 660.4L855.1 658.2L855.4 657.0L855.9 656.2L857.9 655.4L858.6 654.8L859.1 654.2L859.8 652.3L860.5 649.5L861.2 647.9L861.5 646.5L861.3 645.4L861.6 644.0L862.5 642.7L863.0 642.8L863.1 646.8L862.1 648.4L860.1 654.7L858.3 656.4L856.7 660.4L856.5 662.0L855.5 662.5L855.5 662.6Z","M723.3 739.2L723.5 738.0L725.3 735.4L725.8 735.4L727.3 736.7L728.0 736.9L729.6 736.0L729.9 734.5L730.3 734.2L732.4 733.5L733.8 733.3L734.1 733.9L734.5 734.1L735.6 733.8L736.1 733.4L736.3 733.0L736.2 730.5L735.8 730.1L736.3 729.3L737.4 730.6L737.6 731.6L737.9 731.9L738.2 732.0L739.1 731.0L739.3 730.4L738.7 729.4L738.4 729.3L738.3 728.8L738.9 728.6L741.1 729.1L742.1 729.7L742.4 730.3L742.5 731.1L742.9 731.6L745.4 733.6L746.8 733.7L749.4 734.4L749.9 735.5L750.0 736.7L750.4 738.5L751.5 739.4L751.5 739.7L751.0 740.0L748.1 741.4L741.9 743.4L741.2 743.2L741.1 741.3L740.0 740.5L738.2 740.6L736.6 741.3L734.4 741.1L733.4 740.7L733.3 740.5L733.7 740.2L733.8 739.8L733.4 739.1L731.6 738.5L731.2 739.0L730.9 739.7L730.6 740.8L730.6 742.3L730.4 743.0L729.7 743.5L726.9 744.1L721.3 747.3L715.2 748.8L714.2 749.8L713.1 750.4L712.5 750.3L708.4 750.7L705.1 751.2L703.1 751.8L700.7 752.0L700.5 751.8L700.3 749.9L700.6 749.2L701.7 749.1L702.3 747.4L704.3 747.5L706.9 746.9L707.8 746.9L708.2 747.6L708.6 747.8L710.1 747.1L710.1 746.6L711.1 746.1L711.7 746.1L712.2 746.7L712.9 746.6L713.8 746.1L714.7 744.9L716.0 744.0L717.9 743.4L720.1 741.0L720.1 740.1L721.8 739.6L722.8 739.5L723.3 739.2Z","M666.9 748.5L667.7 746.5L668.5 746.1L669.5 746.1L671.6 747.1L671.9 747.5L672.0 748.9L671.5 750.2L670.3 751.5L666.1 751.6L665.5 751.2L665.6 749.9L666.9 748.5Z","M756.3 737.6L756.7 737.3L757.0 737.5L756.8 738.0L753.2 739.8L753.5 739.0L755.3 737.4L756.3 737.6Z","M790.0 725.5L790.4 726.7L789.8 727.3L787.2 727.0L779.5 732.4L778.8 732.7L778.3 732.3L777.9 731.5L777.7 731.5L774.7 732.9L774.1 733.3L773.6 734.1L773.3 735.0L773.3 735.4L770.4 735.9L768.8 734.0L768.7 733.7L770.5 733.2L770.7 733.3L771.3 733.2L774.5 731.9L776.1 730.4L777.0 729.8L777.5 729.8L777.6 730.1L778.9 730.9L779.4 730.7L781.7 729.7L782.5 728.7L785.1 727.4L790.0 725.4L790.0 725.5Z","M749.6 728.2L750.8 728.2L752.3 730.5L752.5 732.2L751.0 733.0L750.3 731.5L749.5 731.3L748.7 731.4L746.4 729.4L745.6 728.2L747.1 728.3L748.6 727.6L748.9 727.0L749.6 728.2Z","M792.0 724.3L792.6 724.3L792.6 724.4L791.8 724.9L790.4 725.2L792.0 724.3Z","M802.1 720.7L801.9 721.4L801.3 722.0L798.7 722.0L796.4 723.0L796.0 723.1L795.9 723.0L796.4 722.5L798.0 721.8L799.5 720.2L801.7 718.4L802.9 718.8L802.1 720.7Z","M808.0 716.0L808.9 716.1L810.6 714.3L811.7 713.8L811.8 714.2L810.6 715.6L809.7 716.3L804.8 719.3L804.2 719.3L806.4 717.7L806.8 716.9L807.7 716.1L808.0 716.0Z","M656.5 509.9L656.6 509.4L657.4 509.6L657.8 510.9L657.5 511.6L657.4 512.2L658.3 514.6L660.2 518.6L660.6 521.2L662.4 526.0L663.3 529.6L664.3 532.5L665.4 533.9L667.1 535.2L668.8 535.3L670.0 535.7L673.1 537.8L674.3 536.5L675.7 536.1L678.1 537.6L680.3 537.8L680.5 537.9L680.5 538.1L675.6 541.1L674.4 541.5L673.7 541.5L672.2 541.1L669.3 539.9L667.1 537.7L664.7 536.4L664.3 535.9L664.0 535.4L663.4 533.9L661.9 526.4L661.5 525.3L659.8 522.6L658.2 517.4L657.2 515.4L655.8 513.3L655.3 512.2L655.7 510.5L656.5 509.9Z","M406.3 173.1L411.0 169.5L412.3 168.4L414.3 166.0L414.6 166.6L414.5 166.9L412.6 169.2L407.5 173.9L406.4 174.8L404.2 175.9L398.7 177.8L395.7 179.2L388.4 183.7L380.6 186.3L379.2 186.6L378.8 186.0L377.3 184.5L374.8 182.6L374.6 182.3L374.8 182.0L377.6 184.0L380.4 185.1L381.9 185.4L382.5 184.6L385.4 183.9L387.4 183.2L390.9 180.9L391.6 180.1L392.1 179.6L394.6 178.7L397.9 177.0L402.7 175.3L404.2 174.0L406.3 173.1Z","M368.7 176.2L370.6 175.6L370.9 175.4L372.9 175.2L374.9 175.6L375.9 176.2L376.6 177.1L375.2 179.6L374.6 181.4L371.8 181.9L370.1 181.1L368.1 179.5L365.9 177.9L364.0 176.9L362.1 176.3L362.4 176.1L363.5 175.9L365.9 175.8L367.5 175.9L368.7 176.2Z","M600.4 368.5L599.6 368.1L599.7 362.3L600.2 361.1L600.2 359.5L599.9 358.5L599.4 357.5L598.9 356.3L599.2 355.3L599.5 355.0L599.9 355.1L600.2 356.9L600.7 358.1L601.2 360.4L601.0 363.1L600.4 363.6L600.4 364.2L600.8 365.4L601.0 367.5L600.4 368.5Z","M552.0 69.1L552.0 69.1L552.0 69.1L557.2 69.4L564.1 69.9L565.4 70.0L566.5 70.1L567.2 70.1L569.1 70.2L594.7 71.9L594.8 71.9L612.5 73.1L612.6 73.2L613.5 73.2L613.5 73.2L623.9 73.9L625.4 74.0L625.8 74.0L627.0 74.1L627.8 74.1L628.7 74.2L629.8 74.3L636.3 74.7L636.3 74.7L640.3 75.0L644.7 75.3L653.4 75.9L656.3 76.1L657.1 76.2L660.6 76.7L660.6 76.7L660.8 84.2L661.4 89.2L661.0 92.6L661.6 95.2L663.1 98.1L664.9 99.9L665.5 100.1L669.5 99.1L676.9 99.6L676.9 99.6L680.3 84.5L680.2 82.0L681.3 77.0L680.6 73.4L678.2 69.2L677.0 66.8L676.9 64.4L679.6 52.5L681.9 51.8L691.2 48.0L694.9 51.3L697.7 52.1L699.1 51.8L701.1 51.7L705.8 53.7L707.6 54.7L708.4 56.1L709.7 56.7L717.9 57.9L719.2 57.7L721.0 59.7L727.1 60.3L737.0 60.7L738.2 61.4L738.7 62.0L738.4 65.2L737.1 72.9L737.2 78.0L738.0 81.6L737.2 83.1L736.8 83.8L737.4 84.4L738.8 84.5L740.3 86.2L740.7 92.9L741.7 95.3L741.8 102.1L742.3 106.2L742.9 109.5L743.4 111.9L745.8 122.0L750.5 143.7L751.8 148.2L752.4 149.8L753.7 151.4L754.3 153.3L754.8 156.1L755.0 160.4L755.6 164.4L757.2 169.5L758.4 172.2L760.0 177.2L760.1 177.6L764.9 190.1L768.8 199.2L771.0 204.5L776.5 217.9L781.6 229.3L784.5 235.8L786.6 239.9L790.3 245.2L791.7 248.3L793.2 251.2L802.2 266.4L807.7 275.8L809.6 279.1L809.6 279.1L809.6 279.2L809.9 279.7L810.0 279.8L813.6 285.0L814.5 286.3L816.0 288.4L816.1 288.4L816.1 288.5L816.3 288.7L816.7 289.4L816.9 289.8L817.7 291.0L819.1 293.4L822.4 297.5L823.3 298.9L824.0 301.5L824.7 305.0L827.1 310.8L828.2 313.0L828.1 313.9L824.5 315.4L823.4 316.6L822.0 318.4L821.2 320.7L820.5 323.7L820.1 326.8L820.0 329.6L820.4 335.6L821.8 344.6L824.1 353.8L826.0 359.0L829.8 367.8L836.0 380.0L836.0 380.1L836.0 380.3L842.3 393.7L845.4 404.6L845.6 406.2L846.2 407.6L847.5 409.7L848.1 412.8L848.5 414.2L849.4 417.8L850.5 420.6L851.2 420.6L854.0 429.5L855.2 434.1L857.2 438.4L857.8 440.5L860.6 447.2L861.2 448.7L864.3 455.0L865.1 457.7L864.5 458.3L865.5 460.6L866.6 464.2L868.7 468.5L871.0 474.6L872.4 480.0L873.7 484.8L875.7 492.4L877.2 499.5L877.1 502.3L876.7 502.3L876.6 502.9L877.1 508.6L877.1 510.2L876.8 513.0L876.8 520.1L876.5 525.0L875.3 531.7L874.3 538.9L873.3 551.1L873.2 551.2L872.9 552.8L872.9 553.1L872.4 559.2L871.8 560.9L871.5 562.8L870.3 572.2L869.9 578.0L869.7 578.4L869.5 578.9L869.5 579.0L869.2 582.8L868.6 590.3L868.6 591.6L868.6 598.2L868.3 601.9L868.5 606.6L868.2 609.2L867.7 612.2L867.6 614.3L866.7 616.8L866.0 617.9L865.2 622.1L865.0 624.3L865.2 625.1L865.0 626.3L864.4 626.4L862.8 624.1L863.4 621.3L864.0 620.0L863.8 619.2L863.2 618.2L862.0 617.3L860.7 617.5L857.6 618.8L856.5 619.7L856.1 620.5L855.5 623.8L854.0 627.1L853.8 627.8L852.8 629.5L851.7 630.2L850.9 631.2L850.4 632.2L850.0 634.4L850.0 636.4L850.4 637.3L849.2 640.5L848.1 640.9L847.7 641.2L846.7 644.9L846.7 647.3L846.9 648.7L847.8 651.3L848.5 651.9L848.0 653.5L848.0 656.3L848.5 657.0L849.5 657.2L849.9 657.8L849.5 659.1L847.1 663.0L845.4 664.0L844.4 664.2L843.2 665.4L842.3 667.2L842.0 668.6L838.7 671.4L836.9 672.6L836.0 673.1L834.4 674.4L833.9 674.9L833.9 674.9L833.7 675.1L832.4 676.7L832.0 677.6L831.9 677.7L831.9 677.8L831.2 678.6L831.1 678.6L830.9 678.5L830.9 678.5L830.4 678.2L830.4 678.1L830.0 677.8L829.9 677.8L829.9 677.8L829.4 676.6L829.3 676.5L829.2 676.5L828.7 676.2L828.4 676.3L828.2 676.4L827.7 676.7L826.7 676.5L826.6 676.1L826.7 675.7L826.7 675.2L825.9 674.4L824.9 674.1L823.7 674.1L821.9 675.8L822.0 677.7L822.3 678.4L822.3 678.4L821.4 679.3L820.6 679.9L819.8 680.5L819.8 680.5L818.9 681.1L818.9 681.1L817.4 681.1L816.8 681.1L816.8 681.1L816.7 681.2L816.6 681.3L816.3 681.4L816.3 681.4L816.2 681.5L816.0 681.9L815.9 682.0L815.2 682.1L814.8 682.1L813.9 682.2L813.4 682.2L812.9 682.2L812.5 682.3L812.0 682.5L811.4 683.3L810.8 684.5L810.5 685.3L809.4 685.1L808.7 684.7L808.0 684.8L807.4 684.8L807.1 684.9L806.6 684.9L806.3 684.3L806.3 683.5L805.7 682.6L805.2 682.2L801.4 681.6L801.3 681.6L799.4 682.4L799.3 682.5L798.6 682.8L798.3 682.9L798.3 682.9L798.3 682.9L798.3 682.8L798.2 682.7L798.1 682.5L798.0 682.1L797.2 681.3L796.6 681.2L796.4 681.1L796.4 681.1L795.2 681.1L795.1 681.2L793.6 681.4L793.5 681.4L793.5 681.4L793.4 681.4L793.1 681.6L793.1 681.6L791.9 682.3L791.1 682.7L791.0 682.8L791.0 682.8L790.9 683.4L790.9 683.7L790.9 683.7L791.0 684.1L791.1 684.4L791.0 685.3L791.0 685.3L791.0 685.3L790.8 685.3L790.4 685.2L789.5 685.1L789.4 685.1L787.9 685.5L787.4 685.7L787.1 685.8L787.0 685.8L786.8 685.9L786.7 685.9L785.6 685.8L785.5 685.7L785.5 685.7L785.3 685.7L785.2 685.7L784.3 685.9L784.3 685.9L784.3 685.9L784.3 685.9L784.1 685.9L784.0 685.9L784.0 685.9L783.9 685.9L783.9 685.9L783.9 685.9L783.8 686.0L783.4 686.1L781.9 686.7L781.7 686.8L781.2 687.0L781.1 687.0L780.2 686.9L778.8 686.4L778.6 686.4L777.8 686.5L777.3 686.5L776.2 686.6L776.2 686.6L776.2 686.6L776.2 686.6L776.1 686.6L773.2 687.6L771.7 686.7L770.0 684.6L769.1 683.9L767.9 683.4L767.1 682.6L767.0 680.4L767.0 680.4L766.9 680.3L766.6 679.3L765.7 677.7L765.7 677.6L765.7 677.6L764.4 676.4L764.1 676.1L764.0 676.0L764.0 675.9L764.1 674.6L764.1 674.4L764.1 673.5L764.2 673.4L764.3 673.0L764.3 672.9L764.3 672.9L764.4 672.6L765.0 668.4L765.3 667.5L766.0 666.7L766.3 665.3L766.0 664.5L766.4 663.6L767.2 662.7L767.8 662.5L769.1 663.0L769.4 662.2L769.5 661.1L768.4 658.3L767.1 658.2L766.2 657.5L766.2 656.2L766.5 655.6L766.5 655.2L764.4 648.9L763.3 647.6L762.1 646.6L760.5 644.3L760.3 643.0L761.0 641.0L760.8 640.5L760.3 639.4L758.7 638.3L758.0 636.6L758.0 635.2L757.2 633.8L757.2 632.1L755.9 629.4L754.4 627.3L753.6 626.4L752.3 623.8L748.5 620.5L747.9 620.7L746.8 620.0L746.8 618.3L747.0 617.1L746.7 616.4L745.9 615.7L745.4 615.0L745.2 614.3L746.9 613.2L747.3 612.7L747.2 611.8L746.9 610.9L746.5 609.3L746.1 608.8L745.2 608.5L742.8 606.8L742.0 605.4L739.7 603.9L739.0 603.6L738.5 603.9L737.3 604.1L735.6 603.5L734.3 602.1L734.1 601.3L732.7 601.3L731.4 601.8L730.6 601.8L730.2 601.5L730.3 600.4L729.9 600.0L728.8 599.8L727.4 600.0L723.8 601.2L723.1 601.3L720.1 600.7L719.2 600.3L717.6 600.3L717.2 600.2L716.2 600.7L715.2 601.6L714.4 604.9L713.8 606.2L713.2 605.9L712.7 605.3L710.3 600.3L709.9 599.8L709.0 599.2L708.5 596.5L707.9 595.3L707.1 594.4L706.7 593.2L706.9 589.4L706.6 589.0L706.0 588.8L705.5 588.1L701.6 578.9L700.9 571.7L700.3 569.4L700.1 565.6L699.7 562.3L698.4 555.8L697.3 552.1L697.2 551.8L694.9 546.3L691.6 542.7L691.5 542.1L690.6 540.9L689.5 539.8L688.0 538.9L686.2 538.1L685.4 537.4L685.2 536.9L685.2 536.7L684.9 535.4L683.8 534.9L682.2 534.4L681.0 534.5L680.5 533.8L681.0 532.1L679.4 531.3L677.6 530.5L675.2 531.2L674.8 533.6L672.5 534.5L671.4 534.5L670.8 528.2L670.1 525.9L669.7 523.8L668.2 517.3L667.0 515.4L663.9 512.4L664.0 510.7L664.7 510.1L666.8 509.8L668.1 510.0L669.4 510.4L670.1 511.3L671.3 514.0L672.0 514.5L672.7 514.2L673.3 512.0L673.5 510.0L674.0 508.4L675.3 505.5L675.7 502.4L675.8 502.0L675.8 500.3L676.4 498.8L676.1 496.6L676.1 494.8L676.3 492.5L676.0 490.5L675.3 489.9L672.9 489.1L672.7 487.1L672.9 485.3L673.6 484.8L675.2 484.8L675.7 484.4L675.8 483.5L675.6 482.2L674.3 481.3L671.2 481.4L670.7 481.6L670.3 481.8L669.5 482.8L668.3 485.0L665.8 485.0L665.1 485.3L664.5 486.0L664.7 488.2L666.4 493.3L667.3 500.2L666.9 500.9L664.7 501.5L664.2 502.2L661.1 502.2L659.9 502.2L658.9 501.0L658.7 500.9L658.7 501.0L657.9 502.0L657.0 504.0L656.1 508.4L655.7 507.4L655.6 503.9L655.1 500.8L654.9 500.3L654.0 497.8L653.2 496.0L652.0 494.4L647.0 486.9L644.6 482.7L642.1 478.4L640.3 474.3L637.7 469.9L636.2 465.5L635.7 464.2L635.4 463.9L634.6 460.8L631.1 453.4L628.3 448.1L627.8 447.4L626.4 446.5L625.4 445.3L625.4 443.2L624.7 442.0L622.6 439.0L620.0 436.0L618.1 433.0L618.1 433.0L614.9 429.1L613.2 427.6L613.3 426.8L611.7 422.0L611.0 420.5L610.0 419.1L608.2 417.1L607.9 416.2L608.2 416.2L611.6 418.0L611.4 420.4L611.8 420.8L613.4 421.0L613.8 420.9L613.7 419.7L614.1 419.1L615.0 418.4L616.2 418.0L617.3 418.0L617.8 416.8L619.2 414.8L621.2 412.6L621.1 411.3L621.1 411.2L621.2 411.0L622.7 410.0L623.9 409.8L625.3 408.4L625.8 407.6L626.5 405.0L626.9 404.3L628.6 401.2L630.9 397.5L632.8 396.0L634.0 395.9L634.5 395.6L634.6 394.8L634.5 394.2L634.0 393.4L634.4 393.0L636.5 392.3L638.8 390.9L639.0 390.5L638.8 389.9L640.3 387.6L640.4 386.6L641.1 385.7L641.9 385.5L642.9 382.7L642.5 381.2L641.9 377.7L640.8 375.6L639.0 375.6L637.1 374.9L636.2 374.4L636.3 373.8L636.0 373.5L634.5 372.6L633.3 373.5L633.2 374.1L633.5 376.3L633.5 379.8L634.2 381.0L635.1 381.6L635.4 382.1L635.0 384.4L634.7 384.6L633.3 384.4L631.2 383.8L626.9 381.5L627.0 379.9L628.4 379.7L629.0 379.0L629.3 378.3L628.4 377.4L628.0 376.8L628.1 376.4L628.7 376.0L629.2 375.3L628.9 372.0L628.2 370.2L626.9 368.2L623.4 367.8L620.4 367.9L617.5 368.3L610.8 369.2L610.4 369.5L610.0 370.3L610.3 371.0L610.3 371.2L610.4 371.6L610.4 371.7L611.4 372.6L613.3 372.9L613.9 373.9L615.3 374.3L619.6 374.6L619.0 375.3L619.2 376.7L621.4 378.7L625.5 377.6L625.5 377.8L625.6 380.4L622.5 380.5L622.9 382.1L623.4 382.9L623.7 385.1L621.6 387.1L620.1 389.2L619.3 392.1L619.9 394.5L619.8 395.1L619.0 397.0L618.4 397.7L617.1 398.1L616.1 397.9L616.1 397.9L615.7 397.7L615.5 397.6L615.4 397.6L615.3 397.5L615.3 397.5L615.2 397.5L615.2 397.5L615.1 397.5L615.0 397.5L614.7 397.5L614.5 398.6L614.5 398.8L613.1 398.1L611.1 398.3L610.6 399.1L610.1 401.4L610.3 402.2L610.8 403.6L611.2 404.1L612.6 405.0L611.9 406.5L609.2 407.9L608.8 407.4L608.7 406.8L608.7 406.4L608.6 405.2L608.7 397.4L608.4 396.1L607.8 394.7L607.1 394.1L606.4 393.1L605.5 390.5L604.2 388.8L603.5 387.9L600.5 385.4L599.7 384.5L597.9 380.9L597.6 379.9L597.4 377.3L597.8 374.6L598.5 371.6L599.4 368.8L600.0 369.0L600.3 369.4L599.5 372.3L598.7 374.7L599.3 374.7L600.5 372.7L601.6 369.8L602.0 369.0L602.7 365.6L603.2 363.3L603.2 360.9L604.2 358.3L604.1 352.6L604.3 351.0L604.4 350.2L603.8 348.3L603.4 347.4L602.6 347.5L601.7 347.2L602.0 345.2L602.7 343.5L606.2 340.0L606.0 339.8L606.1 337.1L606.6 336.0L607.9 335.2L609.2 331.8L608.9 330.8L609.3 328.1L610.9 325.8L611.8 323.2L611.8 319.5L612.7 317.4L614.0 316.5L614.5 315.9L614.6 315.8L614.9 315.0L614.4 313.3L615.2 312.4L615.9 310.2L616.0 309.7L615.8 308.8L615.4 308.4L615.5 306.2L615.6 305.3L616.0 305.1L616.7 303.4L616.2 302.9L616.2 302.4L616.7 300.8L617.0 298.3L616.0 296.5L616.7 294.6L616.6 293.1L617.0 289.6L617.8 286.6L617.8 286.3L617.1 285.4L616.8 284.6L617.1 283.9L616.8 282.9L616.2 281.8L617.3 280.7L617.8 278.5L618.1 276.8L618.1 275.9L617.5 275.2L617.4 274.3L617.1 271.3L618.5 269.9L618.1 268.1L618.4 266.3L617.9 264.8L616.8 263.7L615.1 263.5L613.5 263.0L612.2 259.9L611.6 259.6L610.1 257.6L608.9 255.3L608.7 252.9L606.6 253.1L606.4 253.2L606.1 252.4L606.5 251.6L607.1 249.4L606.5 246.3L604.2 245.1L604.4 244.1L600.8 243.8L600.2 241.3L601.6 240.6L602.4 240.6L602.6 240.0L602.6 239.5L601.9 237.8L602.0 235.9L599.8 234.6L596.7 234.2L593.9 234.2L590.3 233.3L589.4 233.6L588.1 233.6L585.2 233.2L584.7 233.1L583.9 232.2L583.5 232.1L583.0 232.4L580.9 235.4L580.8 236.5L579.6 237.4L577.4 237.7L577.0 236.0L575.9 235.2L576.6 233.2L576.6 232.6L576.2 231.7L574.8 230.3L574.0 228.1L575.3 224.6L575.0 223.7L573.8 222.5L572.0 222.2L570.2 221.1L570.0 220.7L568.1 220.0L567.8 219.9L566.7 220.2L566.2 220.0L565.8 219.8L565.1 217.1L565.0 215.6L565.1 215.5L565.3 213.7L563.9 211.6L562.8 210.5L562.6 208.1L561.0 205.2L558.8 203.8L556.5 203.5L555.7 203.9L553.4 203.3L552.2 200.8L552.1 199.8L551.8 199.0L550.6 198.9L549.8 199.0L547.9 197.5L547.3 196.3L545.9 196.3L545.0 195.9L544.6 194.9L543.0 194.4L542.8 193.7L543.0 192.6L542.5 187.5L542.5 185.6L543.0 183.6L542.6 180.5L541.8 177.6L541.7 177.4L541.5 177.2L539.4 176.4L538.5 176.4L538.2 176.7L537.5 176.5L534.7 175.0L534.7 174.0L533.7 172.9L531.8 172.0L529.3 171.3L528.4 170.3L527.6 169.1L526.5 167.0L525.2 166.2L524.7 165.4L524.5 164.4L524.8 164.1L524.9 163.6L524.5 161.4L523.6 159.5L522.6 158.6L521.3 157.9L519.4 153.0L517.2 151.5L515.3 149.4L514.6 148.8L507.5 145.0L504.4 142.8L500.4 142.1L498.8 140.5L490.2 135.9L490.0 135.6L490.2 135.3L490.0 135.0L487.4 133.0L484.3 130.8L483.4 129.5L481.0 128.7L478.6 128.7L477.2 128.9L475.9 129.5L475.2 129.9L474.8 129.9L474.0 129.6L473.3 129.7L472.1 130.7L471.1 130.1L470.0 130.9L467.8 132.1L466.8 132.2L465.7 132.0L463.7 130.4L463.4 130.4L463.3 130.6L462.8 130.7L459.9 130.6L459.1 129.8L458.9 128.9L458.0 128.6L456.7 129.3L456.4 129.9L456.3 130.9L456.6 131.8L456.6 132.6L455.9 133.5L454.7 133.8L453.9 133.8L452.2 132.4L449.5 133.1L447.8 133.7L447.1 137.5L447.5 141.6L447.7 142.0L448.9 142.0L449.4 143.0L449.6 144.6L449.8 146.3L450.1 146.7L450.3 148.8L450.1 150.0L449.4 151.5L448.8 151.8L445.8 152.2L443.3 151.3L441.4 151.1L440.4 150.7L439.4 149.9L438.6 148.2L436.8 148.7L434.4 149.9L432.6 149.6L430.3 150.3L426.1 152.8L423.6 154.1L422.6 155.0L419.2 157.4L418.3 158.4L418.3 158.8L417.0 159.4L415.6 159.2L414.8 159.4L411.0 161.9L408.5 164.0L407.7 163.9L401.7 167.3L400.4 167.6L397.3 169.1L396.0 170.1L395.3 171.4L394.9 171.3L394.0 169.9L395.1 167.6L396.4 165.7L394.7 164.3L393.7 164.2L392.6 164.5L392.1 165.7L390.3 168.3L389.5 168.8L387.8 169.1L387.3 170.8L386.5 171.5L384.9 172.2L380.5 172.6L377.1 171.7L374.1 171.8L372.2 172.1L369.0 173.0L366.6 173.9L362.7 174.4L361.7 174.6L358.5 176.0L355.4 175.7L352.5 176.0L350.1 177.0L349.7 177.6L350.0 179.0L349.2 178.4L347.6 176.0L346.5 174.1L344.7 169.3L343.1 162.7L342.8 159.4L342.9 157.9L343.2 156.7L344.0 155.3L345.3 154.7L344.7 156.0L344.0 159.3L343.9 162.5L345.0 166.9L346.7 172.8L348.1 174.6L349.1 175.6L350.0 175.6L352.7 174.9L353.3 174.2L354.3 163.0L354.2 161.8L354.0 161.4L353.3 161.1L353.0 160.2L353.0 159.2L353.2 159.0L352.7 158.3L352.0 157.6L351.3 157.5L350.8 157.1L349.8 154.6L348.1 151.6L346.0 149.1L345.7 148.7L344.0 147.1L342.0 145.9L338.5 144.8L337.6 145.0L335.8 144.6L333.7 143.4L330.5 140.7L327.5 137.3L326.5 136.0L325.9 134.0L324.6 133.9L322.9 132.9L321.0 132.0L319.4 131.5L315.1 129.4L311.8 127.0L309.8 124.9L307.3 122.7L303.7 120.2L297.1 116.1L292.7 113.5L285.4 110.1L285.0 109.9L276.1 106.2L262.9 101.7L255.4 99.5L248.9 98.2L245.6 97.8L245.3 97.7L244.1 97.6L242.4 97.5L239.9 97.3L239.7 97.3L239.7 97.3L238.3 97.2L238.0 97.2L234.8 97.4L232.5 96.9L222.2 95.8L210.5 96.3L205.6 96.9L200.6 97.5L194.7 98.5L193.8 98.7L170.4 103.5L165.3 104.2L159.2 104.9L157.7 104.5L156.5 104.0L154.1 104.6L151.0 105.1L144.1 106.9L134.3 108.8L140.9 106.6L141.1 105.4L141.0 101.4L141.0 99.1L142.1 96.3L143.4 94.4L144.2 94.2L143.1 85.2L141.3 82.7L141.1 82.6L141.1 82.5L146.6 70.1L146.7 68.3L146.4 66.9L145.4 64.9L141.2 61.9L138.0 59.9L136.4 59.5L135.9 59.2L132.9 56.9L123.9 45.4L122.8 43.1L124.0 39.6L126.1 35.2L126.8 30.8L126.4 28.4L126.4 28.4L129.1 28.3L131.4 28.3L138.1 28.3L138.2 28.3L138.3 28.3L139.5 28.3L139.5 28.3L140.0 28.3L140.0 28.3L140.3 28.3L140.6 28.3L141.1 28.3L142.9 28.3L143.5 28.3L149.3 28.3L149.7 28.3L150.5 28.3L152.6 28.3L154.8 28.3L155.6 28.3L155.9 28.3L156.9 28.3L157.1 28.3L159.4 28.3L159.9 28.3L160.0 28.3L160.2 28.3L160.3 28.3L160.4 28.3L160.5 28.3L169.6 28.2L169.6 28.2L179.0 28.2L179.4 28.2L180.4 28.2L181.8 28.1L182.2 28.2L183.1 28.2L196.9 28.4L198.4 28.4L202.5 28.4L202.6 28.4L207.0 28.4L207.0 28.4L212.7 28.5L212.8 28.4L213.0 28.5L216.7 28.7L217.7 28.7L219.0 28.7L228.7 28.6L229.1 28.6L233.4 28.9L234.1 28.8L239.5 28.8L239.9 28.8L244.8 28.8L246.1 28.8L246.4 28.8L246.4 28.8L247.8 28.7L248.4 28.7L248.8 28.7L254.8 28.8L256.3 28.8L266.4 28.8L267.1 28.8L267.6 28.8L268.2 28.8L268.8 28.8L279.4 28.9L279.8 28.9L281.5 28.8L334.8 28.4L334.8 28.4L335.8 28.4L368.9 28.0L369.1 28.0L369.1 28.0L369.8 28.0L378.5 28.0L378.8 28.0L379.1 28.0L381.1 28.0L381.2 28.0L381.5 28.0L381.8 28.0L384.0 28.0L384.4 31.3L385.9 35.3L388.2 38.1L390.0 40.7L394.5 56.1L397.6 60.4L397.8 60.5L423.3 61.8L423.3 61.8L429.9 62.1L430.4 62.1L445.7 62.9L455.4 63.4L455.5 63.4L475.1 64.4L477.8 64.6L478.8 64.6L479.3 64.7L479.5 64.7L482.7 64.9L482.7 64.9L495.3 65.6L495.3 65.6L497.8 65.7L501.2 65.9L502.2 66.0L508.9 66.4L515.5 66.8L515.8 66.8L522.0 67.2L522.0 67.2L538.1 68.2L539.0 68.2L540.0 68.3L540.1 68.3L544.0 68.5L545.0 68.6L547.2 68.8L548.8 68.9L548.8 68.9L551.7 69.1L552.0 69.1Z"],"spots":[{"n":"Jupiter Inlet","r":"Treasure Coast","lat":26.945,"lon":-80.073,"f":82,"good":4.6,"p50":2.49,"p90":5.43,"mx":14.11,"note":"Best in the state on the record: a good session on 35.8% of days.","x":873.1,"y":482.8,"drive":242.6,"meanval":-1.2,"bestval":0.88},{"n":"Juno Beach / Jupiter","r":"Treasure Coast","lat":26.877,"lon":-80.0531,"f":82,"good":4.1,"p50":2.43,"p90":5.18,"mx":13.32,"note":"Consistent beach break, several access points.","x":875.1,"y":490.5,"drive":245.6,"meanval":-1.27,"bestval":0.82},{"n":"Apollo Beach (Canaveral NS)","r":"East Central FL","lat":28.87,"lon":-80.81,"f":87,"good":18.8,"p50":2.43,"p90":4.99,"mx":12.01,"note":"North end of Canaveral National Seashore. Sits in a better forecast cell than New Smyrna inlet and wins more often than any other spot.","x":800.0,"y":267.0,"drive":173.4,"meanval":-0.46,"bestval":1.42},{"n":"Hobe Sound","r":"Treasure Coast","lat":27.06,"lon":-80.11,"f":82,"good":4.2,"p50":2.3,"p90":4.79,"mx":13.91,"note":"Quiet stretch just north of Jupiter; 30.5% good days.","x":869.4,"y":469.9,"drive":239.2,"meanval":-1.19,"bestval":0.75},{"n":"Palm Beach (Reef Road)","r":"Palm Beaches","lat":26.7153,"lon":-80.0364,"f":82,"good":2.2,"p50":2.36,"p90":4.86,"mx":12.8,"note":"Well-known local reef/beach break near the inlet.","x":876.7,"y":508.6,"drive":257.6,"meanval":-1.51,"bestval":0.66},{"n":"Lake Worth Pier","r":"Palm Beaches","lat":26.612,"lon":-80.035,"f":81,"good":1.6,"p50":2.3,"p90":4.84,"mx":12.86,"note":"Consistent pier peak, 27.6% good days.","x":876.9,"y":520.2,"drive":263.1,"meanval":-1.55,"bestval":0.6},{"n":"Boynton Beach Inlet","r":"Palm Beaches","lat":26.5423,"lon":-80.0575,"f":81,"good":1.7,"p50":2.23,"p90":4.72,"mx":12.66,"note":"Jetty peak, good shape when the swell direction lines up.","x":874.6,"y":528.0,"drive":265.7,"meanval":-1.59,"bestval":0.56},{"n":"Delray Beach","r":"Palm Beaches","lat":26.46,"lon":-80.06,"f":81,"good":1.5,"p50":2.17,"p90":4.72,"mx":12.53,"note":"Beach break with easy access; 26.3% good days.","x":874.4,"y":537.2,"drive":275.6,"meanval":-1.7,"bestval":0.49},{"n":"Spessard Holland","r":"East Central FL","lat":28.033,"lon":-80.54,"f":86,"good":10.8,"p50":1.84,"p90":3.72,"mx":13.71,"note":"South Melbourne Beach park; 24.3% good days.","x":826.8,"y":360.8,"drive":187.5,"meanval":-0.71,"bestval":1.34},{"n":"Vero Beach","r":"Treasure Coast","lat":27.6386,"lon":-80.3576,"f":85,"good":9.7,"p50":1.84,"p90":3.81,"mx":13.39,"note":"Beach break, decent on E/NE swells.","x":844.9,"y":405.0,"drive":193.2,"meanval":-0.82,"bestval":1.24},{"n":"New Smyrna Beach Inlet","r":"East Central FL","lat":29.0439,"lon":-80.9231,"f":88,"good":13.8,"p50":1.9,"p90":3.94,"mx":10.04,"note":"One of the most consistent and famous spots in FL; can get crowded/sharky.","x":788.7,"y":247.5,"drive":175.8,"meanval":-0.62,"bestval":1.34},{"n":"Ponce Inlet","r":"East Central FL","lat":29.0844,"lon":-80.9214,"f":88,"good":10.1,"p50":1.9,"p90":3.94,"mx":10.04,"note":"Jetty break next to New Smyrna, similar exposure.","x":788.9,"y":242.9,"drive":188.0,"meanval":-0.72,"bestval":1.24},{"n":"Deerfield Beach","r":"Broward","lat":26.3184,"lon":-80.0808,"f":80,"good":0.8,"p50":2.1,"p90":4.53,"mx":13.12,"note":"Beach break, generally smaller/softer than spots further north.","x":872.3,"y":553.1,"drive":289.0,"meanval":-1.87,"bestval":0.38},{"n":"Daytona Beach Shores","r":"East Central FL","lat":29.18,"lon":-80.98,"f":89,"good":12.1,"p50":1.9,"p90":3.94,"mx":10.04,"note":"Fills the gap between Ormond and Ponce Inlet.","x":783.1,"y":232.2,"drive":179.5,"meanval":-0.67,"bestval":1.38},{"n":"Stuart / House of Refuge","r":"Treasure Coast","lat":27.1959,"lon":-80.1652,"f":83,"good":3.0,"p50":1.71,"p90":3.74,"mx":14.5,"note":"Rocky-bottom break, works well on smaller/cleaner days.","x":863.9,"y":454.7,"drive":229.9,"meanval":-1.27,"bestval":0.6},{"n":"Fort Pierce Inlet","r":"Treasure Coast","lat":27.4736,"lon":-80.2848,"f":84,"good":5.0,"p50":1.57,"p90":3.35,"mx":13.12,"note":"Jetty break, can be punchy near the inlet.","x":852.1,"y":423.6,"drive":211.0,"meanval":-1.09,"bestval":1.0},{"n":"Sebastian Inlet (First Peak)","r":"East Central FL","lat":27.8595,"lon":-80.4479,"f":85,"good":4.7,"p50":1.84,"p90":3.67,"mx":10.83,"note":"One of the best and most famous point/inlet breaks on the east coast.","x":835.9,"y":380.3,"drive":208.2,"meanval":-1.03,"bestval":0.97},{"n":"Ponte Vedra Beach","r":"Northeast FL","lat":30.2394,"lon":-81.3823,"f":95,"good":0.8,"p50":1.9,"p90":3.81,"mx":8.53,"note":"Quieter beach break, similar exposure to Jax Beach.","x":743.2,"y":113.4,"drive":253.8,"meanval":-1.4,"bestval":0.52},{"n":"Jacksonville Beach Pier","r":"Northeast FL","lat":30.2825,"lon":-81.3862,"f":95,"good":1.1,"p50":1.9,"p90":3.74,"mx":8.46,"note":"Consistent pier break, popular and crowded on good days.","x":742.8,"y":108.6,"drive":252.3,"meanval":-1.31,"bestval":0.6},{"n":"Fernandina Beach","r":"Northeast FL","lat":30.67,"lon":-81.437,"f":100,"good":0.4,"p50":1.9,"p90":3.54,"mx":7.87,"note":"Exposed beach break near the GA line, catches NE windswell well.","x":737.8,"y":65.1,"drive":270.5,"meanval":-1.56,"bestval":0.6},{"n":"Fort Lauderdale (Sunrise/Sebastian St)","r":"Broward","lat":26.1417,"lon":-80.1064,"f":79,"good":0.1,"p50":1.71,"p90":3.41,"mx":12.14,"note":"Popular urban beach break.","x":869.8,"y":572.9,"drive":310.6,"meanval":-2.43,"bestval":0.11},{"n":"St. Augustine Pier","r":"Northeast FL","lat":29.8896,"lon":-81.287,"f":92,"good":0.7,"p50":1.38,"p90":2.89,"mx":6.69,"note":"Reliable pier peak, works on most swell/wind combos.","x":752.6,"y":152.6,"drive":225.4,"meanval":-1.46,"bestval":0.39},{"n":"Vilano Beach","r":"Northeast FL","lat":29.9169,"lon":-81.2971,"f":92,"good":0.7,"p50":1.38,"p90":2.89,"mx":6.69,"note":"Beach break just north of the St. Augustine inlet.","x":751.6,"y":149.6,"drive":227.4,"meanval":-1.47,"bestval":0.37},{"n":"Cocoa Beach Pier","r":"East Central FL","lat":28.32,"lon":-80.6076,"f":87,"good":5.5,"p50":1.18,"p90":2.36,"mx":10.3,"note":"Classic longboard-friendly beach break, very consistent.","x":820.0,"y":328.6,"drive":166.2,"meanval":-0.92,"bestval":1.05},{"n":"Patrick Space Force Base / Satellite Beach","r":"East Central FL","lat":28.1761,"lon":-80.5967,"f":86,"good":3.6,"p50":1.18,"p90":2.36,"mx":10.56,"note":"Good sandbars, slightly less crowded than Cocoa.","x":821.1,"y":344.8,"drive":175.4,"meanval":-1.06,"bestval":0.88},{"n":"Indialantic / 3rd Ave Melbourne Beach","r":"East Central FL","lat":28.0836,"lon":-80.5601,"f":86,"good":3.1,"p50":1.18,"p90":2.36,"mx":10.56,"note":"Well-known local peak, works on a wide range of swells.","x":824.8,"y":355.1,"drive":179.9,"meanval":-1.06,"bestval":0.81},{"n":"Pensacola Beach","r":"Gulf Coast (Panhandle)","lat":30.328,"lon":-87.1669,"f":165,"good":0.0,"p50":1.57,"p90":3.41,"mx":8.33,"note":"Gulf beach break near the pass; needs a strong weather system to fire.","x":169.2,"y":103.5,"drive":516.4,"meanval":-4.29,"bestval":-1.77},{"n":"Navarre Beach","r":"Gulf Coast (Panhandle)","lat":30.3877,"lon":-86.8631,"f":170,"good":0.0,"p50":1.51,"p90":3.35,"mx":7.94,"note":"Gulf beach break, similar wind/swell dependence as Panama City.","x":199.4,"y":96.8,"drive":498.4,"meanval":-4.16,"bestval":-1.53},{"n":"Flagler Beach Pier","r":"East Central FL","lat":29.4747,"lon":-81.1256,"f":90,"good":1.1,"p50":1.05,"p90":2.17,"mx":6.89,"note":"Sand-bottom pier peak, holds size well.","x":768.6,"y":199.1,"drive":193.8,"meanval":-1.32,"bestval":1.02},{"n":"Ormond Beach","r":"East Central FL","lat":29.2858,"lon":-81.0284,"f":90,"good":1.8,"p50":1.05,"p90":2.17,"mx":6.89,"note":"Wide, flat beach break, good for longer boards.","x":778.3,"y":220.3,"drive":182.7,"meanval":-1.21,"bestval":1.13},{"n":"Panama City Beach (Pier Park)","r":"Gulf Coast (Panhandle)","lat":30.1766,"lon":-85.8055,"f":175,"good":0.0,"p50":1.31,"p90":3.06,"mx":7.81,"note":"Gulf beach break; best during cold-front or tropical-system swells.","x":304.3,"y":120.4,"drive":432.7,"meanval":-3.83,"bestval":-1.07},{"n":"Honeymoon Island","r":"Gulf Coast (West Central)","lat":28.066,"lon":-82.832,"f":265,"good":8.2,"p50":1.05,"p90":2.62,"mx":6.82,"note":"Best of the Tampa-area Gulf beaches; wins 21% of days from Tampa.","x":599.3,"y":357.1,"drive":55.3,"meanval":-0.96,"bestval":1.54},{"n":"Clearwater Beach","r":"Gulf Coast (West Central)","lat":27.9775,"lon":-82.8271,"f":265,"good":7.0,"p50":0.98,"p90":2.36,"mx":6.23,"note":"Most accessible Tampa-area break; needs a strong west wind or a system.","x":599.8,"y":367.0,"drive":54.5,"meanval":-1.02,"bestval":1.59},{"n":"Indian Rocks Beach","r":"Gulf Coast (West Central)","lat":27.887,"lon":-82.848,"f":265,"good":6.7,"p50":1.05,"p90":2.36,"mx":5.91,"note":"Quieter than Clearwater, same swell window.","x":597.7,"y":377.2,"drive":55.5,"meanval":-1.02,"bestval":1.64},{"n":"Lido Key","r":"Gulf Coast (West Central)","lat":27.31,"lon":-82.575,"f":250,"good":2.7,"p50":0.79,"p90":2.1,"mx":7.02,"note":"Sarasota's town beach; occasional shape on a west swell.","x":624.8,"y":441.9,"drive":93.3,"meanval":-1.47,"bestval":1.17},{"n":"Playalinda Beach","r":"East Central FL","lat":28.6192,"lon":-80.6828,"f":87,"good":1.1,"p50":0.85,"p90":1.71,"mx":7.41,"note":"Inside Canaveral National Seashore, less crowded, no rentals nearby.","x":812.6,"y":295.1,"drive":168.1,"meanval":-1.36,"bestval":0.62},{"n":"Venice Beach","r":"Gulf Coast (West Central)","lat":27.1,"lon":-82.454,"f":248,"good":2.2,"p50":0.72,"p90":1.97,"mx":5.58,"note":"Southern Sarasota county; slightly more exposed than Siesta.","x":636.8,"y":465.4,"drive":99.0,"meanval":-1.52,"bestval":1.28},{"n":"South Beach / South Pointe, Miami","r":"Miami-Dade","lat":25.7702,"lon":-80.133,"f":78,"good":0.0,"p50":1.44,"p90":2.36,"mx":8.27,"note":"Jetty break at the south end of Miami Beach; needs real swell to work.","x":867.1,"y":614.6,"drive":328.6,"meanval":-3.06,"bestval":-0.79},{"n":"Siesta Key","r":"Gulf Coast (West Central)","lat":27.2676,"lon":-82.554,"f":250,"good":2.2,"p50":0.72,"p90":1.9,"mx":6.3,"note":"Famously flat, but works on a strong system.","x":626.9,"y":446.7,"drive":93.8,"meanval":-1.54,"bestval":1.54},{"n":"Treasure Island","r":"Gulf Coast (West Central)","lat":27.7692,"lon":-82.769,"f":260,"good":4.9,"p50":0.85,"p90":2.1,"mx":5.51,"note":"Wide beach south of Clearwater.","x":605.6,"y":390.4,"drive":56.2,"meanval":-1.18,"bestval":1.38},{"n":"St. Pete Beach","r":"Gulf Coast (West Central)","lat":27.7253,"lon":-82.7412,"f":258,"good":3.4,"p50":0.66,"p90":1.77,"mx":4.79,"note":"Southern end of the Pinellas barrier islands.","x":608.3,"y":395.3,"drive":56.7,"meanval":-1.38,"bestval":1.17}],"home":{"x":637.7,"y":355.9}};
+const NS='http://www.w3.org/2000/svg';
+const el=(n,a={})=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const svg=document.getElementById('map');
+svg.setAttribute('viewBox',`0 0 ${M.w} ${M.h}`);
+
+// sea backdrop, then land, so the coastline reads as a real edge
+svg.appendChild(el('rect',{x:0,y:0,width:M.w,height:M.h,fill:'var(--sea)',rx:8}));
+M.paths.forEach(d=>svg.appendChild(el('path',{d,fill:'var(--land)',
+  stroke:'var(--land-edge)','stroke-width':1,'stroke-linejoin':'round'})));
+
+// five ordinal steps; both shade and radius carry the value, so the ranking
+// survives greyscale, colour-blindness and print
+const vals=M.spots.map(s=>s.good), lo=Math.min(...vals), hi=Math.max(...vals);
+const STEPS=['var(--s1)','var(--s2)','var(--s3)','var(--s4)','var(--s5)'];
+const t=v=>(v-lo)/(hi-lo);
+const shade=v=>STEPS[Math.min(4,Math.floor(t(v)*5))];
+const radius=v=>4.2+t(v)*6.4;
+
+const tip=document.getElementById('tip');
+function fmtDrive(min){
+  const h=Math.floor(min/60), m=Math.round(min%60);
+  return h>0 ? `${h}h${String(m).padStart(2,'0')}m` : `${m}m`;
+}
+function show(s,ev){
+  tip.innerHTML=`<b>${s.n}</b>`+
+    `<span class="k">${s.r}</span><br>`+
+    `<span class="v">${s.good}%</span> <span class="k">of days worth the drive</span><br>`+
+    `<span class="k">drive</span> <span class="v">${fmtDrive(s.drive)}</span>`+
+    `&nbsp;&nbsp;<span class="k">mean value</span> <span class="v">${s.meanval>0?'+':''}${s.meanval}</span>`+
+    `&nbsp;&nbsp;<span class="k">best</span> <span class="v">${s.bestval>0?'+':''}${s.bestval}</span>`;
+  tip.style.opacity='1'; move(ev);
+}
+function move(ev){
+  const r=tip.getBoundingClientRect();
+  let x=ev.clientX+15,y=ev.clientY-r.height-12;
+  if(x+r.width>innerWidth-8)x=ev.clientX-r.width-15;
+  if(y<8)y=ev.clientY+18;
+  tip.style.left=x+'px'; tip.style.top=y+'px';
+}
+const hide=()=>tip.style.opacity='0';
+
+// home marker: a ring, so it never competes with the data marks
+const hg=el('g');
+hg.appendChild(el('circle',{cx:M.home.x,cy:M.home.y,r:8,fill:'none',
+  stroke:'var(--home)','stroke-width':2.5}));
+hg.appendChild(el('circle',{cx:M.home.x,cy:M.home.y,r:2.4,fill:'var(--home)'}));
+// label sits ABOVE the ring: to its left are the Pinellas Gulf spots, and the
+// text ran straight through them
+const ht=el('text',{x:M.home.x,y:M.home.y-14,'text-anchor':'middle','font-size':12.5,
+  'font-weight':650,fill:'var(--home)'});
+ht.textContent='Tampa 33613'; hg.appendChild(ht);
+svg.appendChild(hg);
+
+// draw weakest first so the strong spots sit on top where they overlap
+[...M.spots].sort((a,b)=>a.good-b.good).forEach(s=>{
+  const c=el('circle',{cx:s.x,cy:s.y,r:radius(s.good).toFixed(1),fill:shade(s.good),
+    stroke:'var(--surface)','stroke-width':1.6,class:'spot',tabindex:'0',
+    role:'img','aria-label':`${s.n}, ${s.good}% of days worth the drive from Tampa`});
+  c.addEventListener('mouseenter',e=>show(s,e));
+  c.addEventListener('mousemove',move);
+  c.addEventListener('mouseleave',hide);
+  c.addEventListener('focus',e=>{const b=c.getBoundingClientRect();
+    show(s,{clientX:b.left+b.width/2,clientY:b.top});});
+  c.addEventListener('blur',hide);
+  svg.appendChild(c);
+});
+
+// label only the extremes - a name on all 41 would be unreadable
+[['Jupiter Inlet',1],['Apollo Beach (Canaveral NS)',-1],['Honeymoon Island',-1],
+ ['Clearwater Beach',-1],['Pensacola Beach',1]].forEach(([name,side])=>{
+  const s=M.spots.find(z=>z.n===name); if(!s)return;
+  const tx=s.x+(side>0?14:-14);
+  const tn=el('text',{x:tx,y:s.y+4,'text-anchor':side>0?'start':'end','font-size':11.5,
+    fill:'var(--ink-2)','font-weight':560});
+  tn.textContent=name.replace(' (Canaveral NS)','').replace(' Pier','').replace(' / Jupiter','');
+  svg.appendChild(tn);
+});
+
+// table view - same data, no colour required
+const tb=document.getElementById('tbody');
+M.spots.forEach(s=>{
+  const tr=document.createElement('tr');
+  if(s.good>=25) tr.className='hot';
+  tr.innerHTML=`<td><span class="sw" style="background:${shade(s.good)}"></span>${s.n}</td>`+
+    `<td style="color:var(--muted)">${s.r}</td>`+
+    `<td class="num">${fmtDrive(s.drive)}</td><td class="num">${s.good}%</td>`+
+    `<td class="num">${s.meanval>0?'+':''}${s.meanval}</td>`+
+    `<td class="num">${s.bestval>0?'+':''}${s.bestval}</td>`;
+  tb.appendChild(tr);
+});
+</script>

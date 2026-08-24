@@ -46,6 +46,7 @@ Use `--days 5` to plan a weekend rather than an afternoon.
 - [Tuning it to how you actually surf](#tuning-it-to-how-you-actually-surf)
 - [Data sources](#data-sources)
 - [Spot list](#spot-list)
+- [Data visualizations](#data-visualizations)
 - [Project layout](#project-layout)
 - [Testing](#testing)
 - [Adding another region later](#adding-another-region-later)
@@ -607,6 +608,29 @@ Coast, west central** (8) · **Gulf Coast, Panhandle** (3)
 
 ---
 
+## Data visualizations
+
+Two self-contained HTML pages in the repo root, built from the same historical
+data the CLI scores against. Open either directly in a browser — no server,
+no build step.
+
+- **`swell-distribution.html`** — the pooled statewide swell-height and
+  -period distributions, plus the raw-vs-log comparison behind the geometric
+  σ (why standard deviation is measured on `log(height)`, not height itself).
+- **`florida-surf-spots.html`** — all 41 spots on a real Florida coastline,
+  shaded by the tool's own value score from a specific origin (33613), not by
+  raw surf quality. Jupiter Inlet has the best swell in the state and still
+  reads pale, because a four-hour drive prices most of that advantage away.
+
+**Both are snapshots, not live views.** Each embeds a JSON blob computed once
+against the historical record and the origin current at build time — they do
+not re-run the pipeline in the browser, and they will not reflect a spot list
+change, a scoring change, or another year of history without being rebuilt.
+Treat them as "what the data showed on the day this was generated," not as a
+dashboard.
+
+---
+
 ## Project layout
 
 ```
@@ -615,7 +639,7 @@ fl_surf_check/
 ├── location.py     # Zip code → lat/lon (pgeocode, Nominatim fallback)
 ├── distance.py     # Great-circle + OSRM driving distance, decay function
 ├── conditions.py   # Open-Meteo + NOAA fetching, batched and cached
-├── climatology.py  # ~5yr statewide swell baseline, pooled and cached on disk
+├── climatology.py  # Full-record statewide swell baseline, pooled and cached on disk
 ├── scoring.py      # All the scoring math (pure functions, no I/O)
 └── cli.py          # argparse, orchestration, table rendering
 
