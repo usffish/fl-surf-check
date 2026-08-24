@@ -91,8 +91,8 @@ examples:
                         help="Show only spots with a positive value score, i.e. where the "
                              "surf actually justifies the drive.")
     parser.add_argument("--rare-only", action="store_true",
-                        help="Show only spots having an unusually good day for the time of "
-                             "year, judged against ~5 years of statewide history.")
+                        help="Show only spots having an unusually good day, judged against "
+                             "the full statewide history.")
     parser.add_argument("--no-history", action="store_true",
                         help="Skip the statewide historical baseline (no rarity column).")
     parser.add_argument("--refresh-history", action="store_true",
@@ -140,8 +140,9 @@ def gather(origin, args):
         for fut in concurrent.futures.as_completed(futures):
             drives[futures[fut].name] = fut.result()
 
-    # ONE statewide seasonal baseline, shared by every spot. Cached on disk for
-    # 30 days: the history request is ~1.1M samples and running it per-invocation
+    # ONE statewide baseline, pooled across the full record and shared by every
+    # spot - not windowed to any time of year. Cached on disk for 30 days: the
+    # history request is several million samples and running it per-invocation
     # trips Open-Meteo's rate limit, which then starves the live conditions
     # request in the same run and drops every spot to its no-data floor.
     baseline = None
@@ -276,11 +277,6 @@ def _local_hhmm(row) -> str:
     return _dt.datetime.fromtimestamp(ts, ZoneInfo(row["spot"].tz)).strftime("%a %H:%M")
 
 
-def _month_name() -> str:
-    import datetime as _dt
-    return _dt.date.today().strftime("%B")
-
-
 def _fmt_time(minutes: float) -> str:
     h, m = divmod(int(round(minutes)), 60)
     return f"{h}h{m:02d}m" if h else f"{m}m"
@@ -315,15 +311,15 @@ def render(rows, origin, args) -> str:
         lines.append("  " + "=" * 92)
         best = max(standouts, key=lambda r: r["rarity"].percentile)
         lines.append(
-            f"  UNUSUALLY GOOD TODAY: {len(standouts)} spot(s) well above the Florida norm "
-            f"for {_month_name()}. Best is {best['spot'].name}."
+            f"  UNUSUALLY GOOD TODAY: {len(standouts)} spot(s) well above the Florida norm. "
+            f"Best is {best['spot'].name}."
         )
         lines.append(f"  baseline: {best['rarity'].baseline_summary}")
         for r in standouts:
             rr = r["rarity"]
             lines.append(
-                f"     {r['spot'].name[:34]:<36} p{rr.percentile:<3.0f} vs all of FL "
-                f"in {_month_name()}   [{rr.label()}]"
+                f"     {r['spot'].name[:34]:<36} p{rr.percentile:<3.0f} vs all of FL, "
+                f"any time of year   [{rr.label()}]"
             )
         lines.append("  " + "=" * 92)
 
@@ -414,7 +410,7 @@ def render(rows, origin, args) -> str:
     if any(r["rarity"].percentile is not None for r in rows):
         lines.append(
             "  VS NORM = percentile (and geometric SDs) against ALL Florida spots' swell "
-            "history for this time of year;"
+            "history, pooled across the full record;"
         )
         lines.append(
             f"            COST = the drive in those same units. VALUE = VS NORM sigma + COST."
@@ -466,7 +462,7 @@ def main(argv=None) -> int:
                   "the time to get there.\n"
                   "  Run without --worth-only to see the least-bad options.\n")
         elif args.rare_only:
-            print("\n  No spot is having an unusually good day for this time of year.\n"
+            print("\n  No spot is having an unusually good day right now.\n"
                   "  Run without --rare-only to see the best of an ordinary day.\n")
         else:
             print("\n  No spots matched your filters. Try relaxing --max-miles or --min-score.\n")

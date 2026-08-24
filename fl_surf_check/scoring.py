@@ -368,26 +368,32 @@ def _verdict(surf_score: float, distance_miles: float) -> str:
 # The evidence-weighting carries over directly. The movie engine distrusts a
 # 100% score from 10 reviews via Laplace's rule of succession, (p+1)/(n+2).
 # The same reasoning applies here with even more force: the marine record only
-# starts in 2021-10, so a "top 2% day!" claim may rest on ~5 seasons. Rather
-# than let a thin sample shout, the percentile is shrunk toward the median in
-# proportion to how little evidence stands behind it.
+# starts in 2021-10, so even pooling the full history, a "top 2% day!" claim
+# rests on a record that only spans a handful of years. Rather than let a thin
+# sample shout, the percentile is shrunk toward the median in proportion to
+# how little evidence stands behind it.
 
 # Rarity labels are expressed as a fraction of the HIGHEST percentile the
 # shrinkage can actually produce, not as absolute percentiles.
 #
-# This matters because shrinkage imposes a ceiling. With the current baseline
-# (n=130 days) even a once-in-5-years 7.4ft swell shrinks to p91, so fixed
-# cutoffs at p93 or p97 would be unreachable dead code - the same trap as a
-# verdict threshold no real input can cross. Scaling to the attainable range
-# keeps every label reachable at any n, and keeps their meaning stable as the
-# record grows: "as close to the top as this much evidence can support".
+# This matters because shrinkage imposes a ceiling, and that ceiling moves
+# with the evidence behind the baseline. Pooling the full record now gives it
+# far more days than the old seasonal window did (n=1,787 vs n=130), so the
+# ceiling has moved out to p99.2 - comfortably past fixed cutoffs like p93 or
+# p97. But the mechanism has to keep working when evidence is thinner than
+# that: with a --no-history fallback rebuilt from a short run, or if the
+# record simply started more recently, a fixed p97 cutoff could again become
+# unreachable dead code - the same trap as a verdict threshold no real input
+# can cross. Scaling to the attainable range keeps every label reachable at
+# any n, and keeps their meaning stable regardless: "as close to the top as
+# this much evidence can support".
 RARITY_STANDOUT = 0.75   # >= 75% of the way from normal to the attainable max
 RARITY_RARE = 0.85
 RARITY_TOP = 0.95
 
 # Laplace-style prior strength, in "virtual days". A baseline built from this
 # many real days carries half the weight of its raw percentile; far fewer and
-# it is pulled hard toward the median. ~30 is a season's worth of observations.
+# it is pulled hard toward the median. ~30 is roughly a month's worth of days.
 RARITY_PRIOR_DAYS = 30.0
 
 
@@ -401,7 +407,7 @@ def shrink_percentile(percentile: float, n_days: int, prior_days: float = RARITY
 
         shrunk = (percentile * n + 50 * prior) / (n + prior)
 
-    With a full seasonal baseline (n ~ 145) a 98th-percentile reading barely
+    With a well-populated baseline (n in the hundreds or more) a 98th-percentile reading barely
     moves, to ~90. With only 8 days of history behind it, that same reading
     lands near 60 - visible, but not shouted about. That is the intended
     behaviour: the record only reaches back to late 2021, and a rarity claim
@@ -455,7 +461,7 @@ def _closeout_adjusted(height_sigma: float | None, height_ft: float | None) -> f
 
 @dataclass
 class RarityScore:
-    """How unusual today's swell is against the statewide seasonal record."""
+    """How unusual today's swell is against the statewide historical record."""
     percentile: float | None       # 0-100 after shrinkage, None without a baseline
     height_percentile: float | None
     period_percentile: float | None

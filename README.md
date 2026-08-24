@@ -6,7 +6,7 @@ Checking the surf is easy. Deciding whether to *go* is the hard part — a 9/10 
 three hours away and a 5/10 day fifteen minutes away are genuinely difficult to
 compare, because they're measured in different units.
 
-`fl-surf-check` scores 26 Florida breaks on live wave, wind and tide data, then
+`fl-surf-check` scores 41 Florida breaks on live wave, wind and tide data, then
 normalizes that score against drive time from your zip code to produce a single
 **"worth the drive"** number.
 
@@ -15,9 +15,9 @@ normalizes that score against drive time from your zip code to produce a single
   --------------------------------------------------------------------------------------------
   #  SPOT                        VALUE  SURF        BEST   DRIVE   COST     VS NORM   VERDICT
   --------------------------------------------------------------------------------------------
-  1  Ponce Inlet                 +0.31   6.2   Sat 11:00     24m  -0.20   p35 -0.5s   Worth the drive
-  2  New Smyrna Beach Inlet      +0.23   6.2   Sat 11:00     32m  -0.27   p35 -0.5s   Break-even - your call
-  3  Ormond Beach                -0.20   5.6   Sat 12:00     12m  -0.10   p26 -1.1s   Break-even  [below normal]
+  1  Ponce Inlet                 +0.80   5.3   Mon 18:00     24m  -0.20   p52 +0.0s   Worth the drive
+  2  Daytona Beach Shores        +0.67   5.0   Mon 18:00      9m  -0.07   p52 +0.0s   Worth the drive
+  3  Apollo Beach (Canaveral NS  +0.43   5.9   Tue 11:00     50m  -0.42   p51 +0.0s   Worth the drive
   --------------------------------------------------------------------------------------------
   BEST = the best surfable hour in the window; all figures are for that hour.
   VALUE = surf (in SDs above normal) minus drive time, at 120 min per SD.  Positive = worth going.
@@ -25,7 +25,7 @@ normalizes that score against drive time from your zip code to produce a single
 
 **`VALUE` is the whole answer.** Positive means the surf is worth the drive;
 the number is how much margin you have, in standard deviations. `BEST` is when
-to go, and `VS NORM` is what makes it meaningful — a 2.8ft day reads as
+to go, and `VS NORM` is what makes it meaningful — a 3.5ft day reads as
 unremarkable in absolute terms and is a genuine top-10% day in Florida.
 
 Use `--days 5` to plan a weekend rather than an afternoon.
@@ -88,7 +88,7 @@ python -m fl_surf_check --zip ZIP [options]
 | Flag | Default | What it does |
 |---|---|---|
 | `--zip`, `-z` | `$FL_SURF_ZIP` | Your 5-digit zip code — the drive origin. Falls back to the `FL_SURF_ZIP` environment variable. |
-| `--top`, `-n` | `10` | How many spots to show. `0` shows all 26. |
+| `--top`, `-n` | `10` | How many spots to show. `0` shows all 41. |
 | `--minutes-per-sd` | `120` | Minutes of driving one standard deviation of surf is worth. The exchange rate in the value score. |
 | `--worth-only` | off | Show only spots with a positive value score. |
 | `--decay-miles` | `75` | *Legacy.* Only used by the `--no-history` fallback blend. |
@@ -97,9 +97,9 @@ python -m fl_surf_check --zip ZIP [options]
 | `--min-score` | *none* | Hard cutoff — drop anything below this surf score. |
 | `--details` | off | Show the per-factor breakdown and raw conditions. |
 | `--days`, `-d` | `1` | How many days ahead to consider (1–7). |
-| `--rare-only` | off | Show only spots having an unusually good day for the time of year. |
+| `--rare-only` | off | Show only spots having an unusually good day, judged against the full history. |
 | `--no-tides` | off | Skip NOAA tide lookups. Faster; tide is a minor input. |
-| `--no-history` | off | Skip the statewide historical baseline. Drops the `VS NORM` and `BONUS` columns. |
+| `--no-history` | off | Skip the statewide historical baseline. `VALUE` and `VS NORM` fall back to `-`. |
 | `--refresh-history` | off | Force-rebuild the cached baseline. Rarely needed — it refreshes itself every 30 days. |
 
 ### Examples
@@ -343,9 +343,12 @@ cannot answer the question you actually care about — *"is today unusually
 good?"* — because that depends entirely on what Florida normally does. A
 2.5ft/11s day is unremarkable in Hawaii and a red-letter day here.
 
-So the tool pools **~5 years of daily-maximum swell across all 41 spots** into a
-single statewide seasonal baseline, and reports today as a percentile against
-it. That's the `VS NORM` column.
+So the tool pools **the full historical record of daily-maximum swell across
+all 41 spots** — every day since October 2021, not windowed to any time of
+year — into a single statewide baseline, and reports today as a percentile
+against it. That's the `VS NORM` column. See
+[Why the baseline isn't seasonal](#why-the-baseline-isnt-seasonal) for the
+tradeoff that choice makes.
 
 ### Why one statewide baseline, not one per spot
 
@@ -355,12 +358,37 @@ Sebastian Inlet day, because each is only compared to itself. Since the whole
 point is choosing *where to drive*, they need one shared yardstick — a spot
 that is simply better should read as better.
 
+### Why the baseline isn't seasonal
+
+An earlier version windowed the baseline to &plusmn;14 days around the date
+being scored, so a February day was judged against other Februaries. That was
+removed: the baseline now pools **every day in the full record**, regardless
+of time of year.
+
+The tradeoff is real, and it changes what "normal" means. Measured on the
+actual record:
+
+| | late-August window (old) | full record (current) |
+|---|---|---|
+| median swell height | 1.25ft | **1.51ft** |
+| p90 swell height | 2.95ft | **3.54ft** |
+
+Winter nor'easters run bigger than summer trade-wind swell, and pooling them
+in pulls the whole distribution up. The practical effect: a typical *August*
+day now reads as somewhat below normal, where a seasonal baseline would have
+called it ordinary for the time of year. In exchange, "normal" stops shifting
+meaning with the calendar — it answers one question, "how does this compare
+to Florida surf overall," rather than a question whose answer depends on
+today's date. It also means the baseline no longer needs rebuilding every time
+the season moves, and every day of the 6-year record now counts as evidence,
+so shrinkage (below) has far less work to do than it used to.
+
 ### Why percentile rank, not min–max
 
 Surf is heavily right-skewed: a handful of tropical systems own the top of the
 range. Measured on the real record, min–max normalisation maps a **median** day
-to 0.17 and even a strong p90 day to only 0.38 — every ordinary day bunches
-into the bottom fifth of the scale and the signal is lost. Percentile rank asks
+to 0.10 and even a strong p90 day to only 0.24 — every ordinary day bunches
+into the bottom quarter of the scale and the signal is lost. Percentile rank asks
 the same question ("where does this sit in the observed population?") but
 spreads evenly by construction and is immune to how extreme the extremes are.
 
@@ -382,8 +410,8 @@ a scoring change.
 
 ### Why thin evidence gets shrunk
 
-The record only starts in October 2021, so a "top 2% day!" claim may rest on
-five seasons. Rather than let a thin sample shout, the percentile is pulled
+The record only starts in October 2021, so a "top 2% day!" claim may rest on a
+young dataset. Rather than let a thin sample shout, the percentile is pulled
 toward normal in proportion to the evidence behind it — Laplace's rule of
 succession, generalised from a proportion to a percentile:
 
@@ -391,8 +419,12 @@ succession, generalised from a proportion to a percentile:
 shrunk = (percentile x n + 50 x prior) / (n + prior)
 ```
 
-With a full baseline (n ≈ 130 days) a p98 reading lands near p89. With 8 days
-behind it, that same reading lands near p60 — visible, but not shouted about.
+With the full baseline (n ≈ 1,787 days, pooling every day in the record) a p98
+reading lands at p97 — barely moved, because there is now a great deal of
+evidence behind it. That's the direct benefit of not windowing to a season:
+a thin 130-day slice used to pull that same p98 down to p89. With only 8 days
+of evidence, the same reading still lands near p60 — visible, but not shouted
+about.
 
 Because shrinkage imposes a ceiling, the `STANDOUT` / `RARE` / `BEST IN NYR`
 labels are thresholds on the *attainable* range rather than fixed percentiles.
@@ -402,24 +434,24 @@ Fixed cutoffs would be unreachable dead code.
 
 ### Why the standard deviation is geometric
 
-Measured on the real record, raw swell height has a **skew of 1.95**. A plain
-z-score on that misbehaves badly:
+Measured on the pooled full-record baseline, raw swell height has a
+**skew of 1.96**. A plain z-score on that misbehaves badly:
 
 | | raw values | log space |
 |---|---|---|
-| skew | 1.95 | **0.27** |
-| z = 0 lands at | p64 | **p50** |
-| +1 SD | p87.6 | **p84.8** (textbook: 84.1) |
-| biggest day in 5 years | z **+5.9** | z **+3.1** |
+| skew | 1.96 | **&minus;0.12** |
+| z = 0 lands at | p62 | **p50** |
+| +1 SD | p89 | **p83.5** (textbook: 84.1) |
+| biggest day on record | z **+9.7** | z **+3.4** |
 
-At 120 minutes per SD, that +5.9 would have justified a *twelve-hour* drive. Taking
-logs first restores σ's textbook meaning, and the record day becomes a
-well-behaved +3.1σ ≈ three extra hours. Two guards on top: the sigma is damped
-by the same evidence weighting as the percentile, and the allowance is capped at
-four hours. Below-normal days earn nothing but are never penalised — the real
+At 120 minutes per SD, that raw +9.7 would have justified a *nineteen-hour*
+drive — an even starker case for log space now that the fuller record includes
+more of the tail. Taking logs first restores σ's textbook meaning, and the
+same day becomes a well-behaved +3.4σ. There is no separate cap on this in the
+current value formula — `value = σ − drive_minutes / minutes_per_sd` runs
+unbounded in both directions, so a big enough σ really can outweigh a very
+long drive. Below-normal days earn nothing but are never penalised — the real
 drive time is already the honest cost.
-
----
 
 ---
 
@@ -487,13 +519,15 @@ This tool deliberately minimizes the load it puts on free services:
   request and wind data in another.
 - **Responses are cached locally for 30 minutes** (`requests-cache`). Running it
   five times in a row hits the network once.
-- **The historical baseline is fetched once and cached for 30 days**, and
-  tolerates 7 days of seasonal drift before rebuilding. An earlier version keyed
-  the cache on an exact date, so it expired at midnight and re-ran the full pull
-  every single day — precisely the thing that trips the rate limit. It is a
-  single batched request, but a large one — millions of samples across 41 spots and
-  five years. Running it every invocation would trip Open-Meteo's per-minute
-  rate limit, which then starves the live conditions request in the same run.
+- **The historical baseline is fetched once and cached for 30 days.** An
+  earlier version keyed the cache to the date being scored (needed for the
+  seasonal window that no longer exists), so it expired at midnight and re-ran
+  the full pull every single day — precisely the thing that trips the rate
+  limit. Now that the baseline pools the whole record rather than a moving
+  window, freshness is purely a matter of age: it is a single batched request,
+  but a large one — millions of samples across 41 spots and the full history —
+  and running it every invocation would trip Open-Meteo's per-minute rate
+  limit, which then starves the live conditions request in the same run.
   The cache (`.fl_surf_climatology.json`, gitignored) is what prevents that.
 - **Rate-limit errors are not retried.** Open-Meteo's limit is per-minute, so
   short backoff could never outlast it and each attempt would spend more of the
@@ -587,7 +621,7 @@ fl_surf_check/
 
 tests/
 ├── test_scoring.py       # 32 tests on the scoring math
-├── test_climatology.py   # 68 tests on baselines, rarity, value, storms, daylight
+├── test_climatology.py   # 69 tests on baselines, rarity, value, storms, daylight
 └── test_cli_offline.py   # 11 end-to-end tests with the network mocked
 ```
 
@@ -604,10 +638,10 @@ python -m pytest tests/ -q
 ```
 
 ```
-111 passed in 1.61s
+115 passed in 1.48s
 ```
 
-All 111 tests run **offline** — network calls are mocked and `build_baseline`
+All 115 tests run **offline** — network calls are mocked and `build_baseline`
 takes an injectable client — so the suite is fast and works in CI. They cover
 the scoring curves (monotonicity, bounds, continuity, Florida-specific tuning),
 the distance decay math, the worth-the-drive blend (including that an epic far
@@ -658,8 +692,8 @@ OSRM routes worldwide, `pgeocode` handles any US zip. Nothing in
 ### Why the curves matter more than the spot list
 
 Westport, WA has a **median** day of 4.72ft and a p90 of 9.32ft, against
-Florida's 1.31ft and 2.82ft. Its biggest day on record is 22.4ft; Florida's is
-7.4ft. Fed to the Florida height curve, the ordering inverts:
+Florida's 1.51ft and 3.54ft. Its biggest day on record is 22.4ft; Florida's is
+14.5ft. Fed to the Florida height curve, the ordering inverts:
 
 | Westport day | ft | Florida height score |
 |---|---|---|
@@ -670,7 +704,7 @@ Florida's 1.31ft and 2.82ft. Its biggest day on record is 22.4ft; Florida's is
 
 A typical day scores higher than a genuinely big one, because the curve encodes
 "Florida sandbar" rather than "wave." Scored against Florida's *climatology* it
-is worse still — an ordinary Westport Tuesday reads as `BEST IN 5YR`, so the
+is worse still — an ordinary Westport Tuesday reads as `BEST IN 6YR`, so the
 sigma term pins high and stops discriminating between days entirely.
 
 A Pacific Northwest curve would peak somewhere near 8–12ft. That is a local

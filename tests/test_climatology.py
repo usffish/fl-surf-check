@@ -219,7 +219,7 @@ class _FakeClient:
 def test_build_baseline_pools_all_spots_into_one_distribution():
     spots = list(SPOTS)
     client = _FakeClient(len(spots))
-    b = build_baseline(spots, target_date=dt.date(2022, 6, 15), client=client)
+    b = build_baseline(spots, end_date=dt.date(2023, 12, 15), client=client)
 
     assert client.calls == 1, "history must be ONE batched request, not one per spot"
     assert b is not None
@@ -229,20 +229,29 @@ def test_build_baseline_pools_all_spots_into_one_distribution():
     assert b.n_observations == pytest.approx(b.n_days * len(spots), rel=0.05)
 
 
-def test_build_baseline_counts_distinct_days_not_spot_days_as_evidence():
+def test_build_baseline_pools_the_full_record_not_a_window():
     """
-    All 26 spots see the same Atlantic swell, so one date is ~one independent
-    observation, not 26. Shrinkage must use the conservative count.
+    The baseline is no longer seasonal - it must use every day the fake client
+    serves (_FakeClient's default is 800), not a +/-14 day slice of it.
     """
     spots = list(SPOTS)
-    b = build_baseline(spots, target_date=dt.date(2022, 6, 15), client=_FakeClient(len(spots)))
-    # +/-14 days over ~2 seasons of fake data: tens of days, not thousands.
-    assert b.n_days < 100
-    assert b.n_observations > 1000
+    b = build_baseline(spots, end_date=dt.date(2023, 12, 15), client=_FakeClient(len(spots)))
+    assert b.n_days > 700, f"expected close to 800 pooled days, got {b.n_days}"
+
+
+def test_build_baseline_counts_distinct_days_not_spot_days_as_evidence():
+    """
+    All 41 spots see broadly the same weather systems, so one date is ~one
+    independent observation, not 41. Shrinkage must use the conservative count.
+    """
+    spots = list(SPOTS)
+    b = build_baseline(spots, end_date=dt.date(2023, 12, 15), client=_FakeClient(len(spots)))
+    assert b.n_observations == pytest.approx(b.n_days * len(spots), rel=0.05)
+    assert b.n_observations > b.n_days  # pooling really did happen
 
 
 def test_percentile_curves_are_sorted():
-    b = build_baseline(list(SPOTS), target_date=dt.date(2022, 6, 15),
+    b = build_baseline(list(SPOTS), end_date=dt.date(2023, 12, 15),
                        client=_FakeClient(len(SPOTS)))
     assert list(b.height_p) == sorted(b.height_p)
     assert list(b.period_p) == sorted(b.period_p)
@@ -254,12 +263,11 @@ def test_cache_round_trips_and_avoids_a_second_fetch(tmp_path):
     spots = list(SPOTS)
     path = str(tmp_path / "clim.json")
     client = _FakeClient(len(spots))
-    target = dt.date.today()
 
-    first = load_baseline(spots, path=path, target_date=target, client=client)
+    first = load_baseline(spots, path=path, client=client)
     assert first is not None and client.calls == 1
 
-    second = load_baseline(spots, path=path, target_date=target, client=client)
+    second = load_baseline(spots, path=path, client=client)
     assert client.calls == 1, "a fresh cache must not re-fetch"
     assert second.height_p == first.height_p
     assert second.n_days == first.n_days
@@ -269,28 +277,32 @@ def test_stale_cache_triggers_a_rebuild(tmp_path):
     spots = list(SPOTS)
     path = str(tmp_path / "clim.json")
     client = _FakeClient(len(spots))
-    target = dt.date.today()
 
-    load_baseline(spots, path=path, target_date=target, client=client)
+    load_baseline(spots, path=path, client=client)
     with open(path) as fh:
         raw = json.load(fh)
     raw["meta"]["built"] = (dt.date.today() - dt.timedelta(days=999)).isoformat()
     with open(path, "w") as fh:
         json.dump(raw, fh)
 
-    load_baseline(spots, path=path, target_date=target, client=client)
+    load_baseline(spots, path=path, client=client)
     assert client.calls == 2
 
 
-def test_cache_is_rebuilt_when_the_season_moves(tmp_path):
-    """The baseline is seasonal, so a different target date must not reuse it."""
+def test_cache_is_not_rebuilt_just_because_the_calendar_moved(tmp_path):
+    """
+    Regression for the opposite of the old behaviour: the baseline is no
+    longer seasonal, so calling on two different dates must reuse one cache
+    rather than rebuilding - that rebuild-every-day behaviour is exactly what
+    used to trip Open-Meteo's rate limit.
+    """
     spots = list(SPOTS)
     path = str(tmp_path / "clim.json")
     client = _FakeClient(len(spots))
 
-    load_baseline(spots, path=path, target_date=dt.date(2022, 6, 15), client=client)
-    load_baseline(spots, path=path, target_date=dt.date(2022, 12, 15), client=client)
-    assert client.calls == 2
+    load_baseline(spots, path=path, end_date=dt.date(2023, 6, 15), client=client)
+    load_baseline(spots, path=path, end_date=dt.date(2023, 12, 15), client=client)
+    assert client.calls == 1
 
 
 def test_corrupt_cache_does_not_crash(tmp_path):
@@ -671,7 +683,7 @@ def test_civil_twilight_keeps_dawn_patrol():
 def test_baseline_build_drops_night_hours():
     """The filter must actually reach build_baseline, not just exist."""
     spots = list(SPOTS)
-    b = build_baseline(spots, target_date=dt.date(2022, 6, 15), client=_FakeClient(len(spots)))
+    b = build_baseline(spots, end_date=dt.date(2023, 12, 15), client=_FakeClient(len(spots)))
     assert b is not None
     # _FakeClient serves every hour; a 24h baseline would pool ~2x the spot-days
     # per distinct day that a daylight-filtered one does.

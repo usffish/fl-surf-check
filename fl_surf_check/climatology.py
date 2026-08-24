@@ -22,6 +22,24 @@ Inlet, because each is only compared to itself. Since the whole point is
 deciding which spot to drive to, they have to be measured against one shared
 yardstick. A spot that is simply better should read as better.
 
+NOT SEASONAL - DELIBERATELY
+----------------------------
+An earlier version windowed the baseline to +/-14 days around the date being
+scored, so a February day was judged against other Februaries and an August
+day against other Augusts. That was removed on request: the baseline now
+pools every day in the full record, regardless of time of year.
+
+The tradeoff is real and worth stating plainly, because it changes what
+"normal" means. Measured on the actual record: the seasonal (late-August)
+window put the statewide median at 1.25ft and the 90th percentile at 2.95ft.
+Pooling all five years instead moves those to 1.51ft and 3.54ft, because
+winter nor'easters run bigger than summer trade-wind swell and now pull the
+whole distribution up. The practical effect: a typical AUGUST day will read
+as somewhat below normal against a baseline that also contains every winter
+storm on record, where a seasonal baseline would have called it ordinary. What
+you get in exchange is a single, simpler question - "how does this compare to
+Florida surf overall" - rather than one that shifts meaning with the calendar.
+
 DATA SOURCE AND ITS LIMITS
 --------------------------
 Open-Meteo's marine endpoint serves history through the same URL as the
@@ -31,31 +49,33 @@ assumed:
   - History begins 2021-10-01. There is no marine data before that; the
     archive endpoint (archive-api.open-meteo.com) returns all-NaN for wave
     variables, carrying atmospheric reanalysis only. So the baseline rests on
-    ~5 seasons, not 30. That thinness is why the rarity percentile is shrunk
-    toward normal - see scoring.shrink_percentile.
+    ~5 years of days, not decades. That thinness is why the rarity percentile
+    is shrunk toward normal - see scoring.shrink_percentile - though pooling
+    the full record rather than a 29-day window means there is now far more
+    evidence behind it, and shrinkage has correspondingly less to do.
 
-  - The full pull is ~1.1M samples across 26 spots. It takes about 4 seconds,
-    and running it repeatedly WILL trip Open-Meteo's per-minute rate limit -
-    which then starves the live conditions request in the same run, silently
-    dropping every spot to its no-data floor. It must be fetched once and
-    cached. Hence the 30-day disk cache below.
+  - The full pull is now several million samples across 41 spots. It takes a
+    few seconds, and running it repeatedly WILL trip Open-Meteo's per-minute
+    rate limit - which then starves the live conditions request in the same
+    run, silently dropping every spot to its no-data floor. It must be
+    fetched once and cached. Hence the 30-day disk cache below.
 
   - Requesting 6 hourly variables returns them in the order requested
     (verified against the flatbuffers Variable enum), so positional reads are
     safe, but they are read by index and stay coupled to HISTORY_VARS.
 
 WHY DAILY MAXIMA, NOT HOURLY SAMPLES
-------------------------------------
-A +/-14 day window holds ~3,120 hourly samples per spot, but those are nowhere
-near independent - a single 3-day swell contributes 72 highly correlated hours.
-Each day is therefore reduced to its maximum before pooling, which both matches
-the question ("was that a good surf *day*") and stops autocorrelation from
-inflating the apparent evidence.
+-------------------------------------
+The full record holds tens of thousands of hourly samples per spot, but those
+are nowhere near independent - a single 3-day swell contributes 72 highly
+correlated hours. Each day is therefore reduced to its maximum before pooling,
+which both matches the question ("was that a good surf *day*") and stops
+autocorrelation from inflating the apparent evidence.
 
-The same caution applies across spots: all 26 see the same Atlantic swell, so
-26 spot-days on one date are not 26 independent observations. The pooled
-distribution uses every spot-day, but the evidence count that drives shrinkage
-is the number of distinct DAYS - the conservative choice.
+The same caution applies across spots: all 41 see broadly the same weather
+systems, so 41 spot-days on one date are not 41 independent observations. The
+pooled distribution uses every spot-day, but the evidence count that drives
+shrinkage is the number of distinct DAYS - the conservative choice.
 """
 
 from __future__ import annotations
@@ -79,19 +99,6 @@ HISTORY_VARS = ("swell_wave_height", "swell_wave_period")
 DEFAULT_CACHE_PATH = ".fl_surf_climatology.json"
 CACHE_MAX_AGE_DAYS = 30
 
-# How far the cached window centre may sit from the date being scored before
-# the baseline is rebuilt. Without this the cache was keyed on an exact date,
-# so it expired at midnight and the ~1.1M-sample history pull ran EVERY day -
-# the precise condition that trips Open-Meteo's rate limit and starves the
-# live conditions request. The seasonal window is +/-14 days, so a centre a
-# few days off covers almost the same span: at 7 days the two windows share
-# 22 of 29 days.
-CACHE_WINDOW_DRIFT_DAYS = 7
-
-# Half-width of the seasonal window, in days. +/-14 balances "same time of
-# year" against having enough days to form a distribution.
-SEASON_WINDOW_DAYS = 14
-
 # Sun elevation (degrees) above which an hour counts as surfable light.
 # -6 is civil twilight: the sun is below the horizon but there is enough light
 # to see a set coming, which is exactly when dawn patrol happens. Using 0
@@ -105,7 +112,8 @@ _LEVELS = tuple(range(0, 101))
 @dataclass(frozen=True)
 class Baseline:
     """
-    The pooled Florida-wide seasonal distribution of surf, as daily maxima.
+    The pooled Florida-wide distribution of surf, as daily maxima across the
+    full historical record - not windowed to any particular time of year.
 
     `n_days` counts distinct calendar days (the independent unit), while
     `n_observations` counts spot-days actually pooled. Shrinkage uses the
@@ -142,11 +150,11 @@ class Baseline:
         return _log_z(value, self.log_period_mean, self.log_period_sd)
 
     def height_percentile(self, value: float | None) -> float | None:
-        """Where a swell height sits in the statewide seasonal record, 0-100."""
+        """Where a swell height sits in the statewide historical record, 0-100."""
         return _percentile_of(value, self.height_p)
 
     def period_percentile(self, value: float | None) -> float | None:
-        """Where a swell period sits in the statewide seasonal record, 0-100."""
+        """Where a swell period sits in the statewide historical record, 0-100."""
         return _percentile_of(value, self.period_p)
 
     def summary(self) -> str:
@@ -244,24 +252,16 @@ def _daily_maxima(values: np.ndarray, times: np.ndarray):
     )
 
 
-def _seasonal_mask(day_numbers: np.ndarray, target_doy: int, window: int) -> np.ndarray:
-    """True where a day falls within +/-window of the target day-of-year, wrapping at New Year."""
-    doy = np.array([
-        dt.datetime.fromtimestamp(int(d) * 86400, dt.timezone.utc).timetuple().tm_yday
-        for d in day_numbers
-    ])
-    delta = np.abs(doy - target_doy)
-    return np.minimum(delta, 365 - delta) <= window
-
-
 def build_baseline(
     spots,
-    target_date: dt.date | None = None,
-    window: int = SEASON_WINDOW_DAYS,
+    end_date: dt.date | None = None,
     client=None,
 ) -> Baseline | None:
     """
-    Fetch history for every spot and pool it into ONE statewide baseline.
+    Fetch the full history for every spot and pool it into ONE statewide
+    baseline, covering the entire record from HISTORY_START to `end_date`
+    (default: yesterday). Not windowed to any time of year - see the module
+    docstring for why.
 
     One batched request covers all spots. Callers should normally go through
     `load_baseline`, which puts a disk cache in front of this. Returns None if
@@ -271,8 +271,8 @@ def build_baseline(
         import openmeteo_requests
         client = openmeteo_requests.Client()
 
-    target = target_date or dt.date.today()
-    end = min(target - dt.timedelta(days=1), dt.date.today() - dt.timedelta(days=1))
+    end = (end_date or dt.date.today()) - dt.timedelta(days=1)
+    end = min(end, dt.date.today() - dt.timedelta(days=1))
 
     responses = client.weather_api(
         MARINE_URL,
@@ -309,13 +309,9 @@ def build_baseline(
         h_daily, days = _daily_maxima(h[finite], times[finite])
         p_daily, _ = _daily_maxima(p[finite], times[finite])
 
-        season = _seasonal_mask(days, target.timetuple().tm_yday, window)
-        if not season.any():
-            continue
-
-        heights.append(h_daily[season])
-        periods.append(p_daily[season])
-        all_days.append(days[season])
+        heights.append(h_daily)
+        periods.append(p_daily)
+        all_days.append(days)
         n_spots += 1
 
     if not heights:
@@ -328,8 +324,8 @@ def build_baseline(
     if len(pooled_h) < 10:
         return None
 
-    # Distinct days, not spot-days: all 26 spots see the same swell, so a
-    # single date supplies roughly one independent observation, not 26.
+    # Distinct days, not spot-days: all 41 spots see broadly the same weather
+    # systems, so a single date supplies roughly one independent observation.
     distinct_days = np.unique(pooled_days)
     years = {
         dt.datetime.fromtimestamp(int(d) * 86400, dt.timezone.utc).year
@@ -361,18 +357,12 @@ def build_baseline(
 # Disk cache
 # ---------------------------------------------------------------------------
 
-def _cache_is_fresh(path: str, max_age_days: int, target: dt.date) -> bool:
+def _cache_is_fresh(path: str, max_age_days: int) -> bool:
     try:
         with open(path) as fh:
             meta = json.load(fh).get("meta", {})
     except (OSError, ValueError):
         return False
-    try:
-        centre = dt.date.fromisoformat(meta["window_center"])
-    except (KeyError, TypeError, ValueError):
-        return False
-    if abs((target - centre).days) > CACHE_WINDOW_DRIFT_DAYS:
-        return False  # the baseline is seasonal and has drifted too far
     try:
         built = dt.date.fromisoformat(meta["built"])
     except (KeyError, ValueError):
@@ -384,23 +374,23 @@ def load_baseline(
     spots,
     path: str = DEFAULT_CACHE_PATH,
     max_age_days: int = CACHE_MAX_AGE_DAYS,
-    target_date: dt.date | None = None,
+    end_date: dt.date | None = None,
     client=None,
     force_refresh: bool = False,
 ) -> Baseline | None:
     """
-    Return the statewide seasonal baseline, hitting the network only if needed.
+    Return the statewide baseline, hitting the network only if needed.
 
     The history request is heavy enough that running it every invocation trips
     Open-Meteo's per-minute limit and starves the live conditions request in
-    the same run. This cache is what keeps that from happening.
+    the same run. This cache is what keeps that from happening. Because the
+    baseline is no longer seasonal, freshness is purely a matter of age - it
+    does not need rebuilding just because the calendar moved.
 
     Any failure returns None rather than raising: the tool must still rank
     spots when the baseline is unavailable, just without rarity.
     """
-    target = target_date or dt.date.today()
-
-    if not force_refresh and _cache_is_fresh(path, max_age_days, target):
+    if not force_refresh and _cache_is_fresh(path, max_age_days):
         try:
             with open(path) as fh:
                 raw = json.load(fh)["baseline"]
@@ -420,7 +410,7 @@ def load_baseline(
             pass  # fall through and rebuild
 
     try:
-        baseline = build_baseline(spots, target_date=target, client=client)
+        baseline = build_baseline(spots, end_date=end_date, client=client)
     except Exception:
         return None
 
@@ -434,11 +424,9 @@ def load_baseline(
                 {
                     "meta": {
                         "built": dt.date.today().isoformat(),
-                        "window_center": target.isoformat(),
-                        "window_days": window_days_of(),
                         "history_start": HISTORY_START,
                         "vars": list(HISTORY_VARS),
-                        "scope": "florida-wide pooled, daylight hours only",
+                        "scope": "florida-wide pooled, full record, daylight hours only",
                         "daylight_elevation_deg": DAYLIGHT_ELEVATION_DEG,
                     },
                     "baseline": {
@@ -461,7 +449,3 @@ def load_baseline(
         pass  # the cache is an optimisation, not a requirement
 
     return baseline
-
-
-def window_days_of() -> int:
-    return SEASON_WINDOW_DAYS
