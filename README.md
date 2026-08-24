@@ -216,6 +216,11 @@ the same one — **standard deviations of surf** — and subtracts:
 value = sigma(surf)  -  drive_minutes / minutes_per_sd
 ```
 
+Two optional terms join this once you start logging sessions — `itch` lifts
+every spot the longer you have been out of the water, and `novelty` handicaps
+the ones you surf most. Both are zero until then, so the formula above is what
+runs by default. See [Your surf log](#your-surf-log).
+
 **One standard deviation above normal is worth 120 minutes of driving.** Two is
 worth four hours. The sign is the answer: positive means go, zero is
 break-even, and the magnitude is your margin.
@@ -455,10 +460,10 @@ Measured on the pooled full-record baseline, raw swell height has a
 At 120 minutes per SD, that raw +9.7 would have justified a *nineteen-hour*
 drive — an even starker case for log space now that the fuller record includes
 more of the tail. Taking logs first restores σ's textbook meaning, and the
-same day becomes a well-behaved +3.4σ. There is no separate cap on this in the
-current value formula — `value = σ − drive_minutes / minutes_per_sd` runs
-unbounded in both directions, so a big enough σ really can outweigh a very
-long drive. Below-normal days earn nothing but are never penalised — the real
+same day becomes a well-behaved +3.4σ. There is no separate cap on this
+anywhere in the value formula — every term runs unbounded in both directions,
+so a big enough σ really can outweigh a very long drive (and the surf-log
+factors are uncapped for the same reason). Below-normal days earn nothing but are never penalised — the real
 drive time is already the honest cost.
 
 ---
