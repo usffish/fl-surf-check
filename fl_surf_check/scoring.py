@@ -937,7 +937,21 @@ def pick_best_hour(readings, spot, baseline, is_daylight_fn, local_date_fn=None)
         surf = score_conditions(cond, spot)
         rare = rarity_score(cond, baseline)
         sigma = effective_sigma(rare, surf)
-        key = sigma if sigma is not None else surf.total
+
+        # Rank on sigma, falling back to the 0-10 score ONLY for hours that
+        # have no sigma - and never let the two mix in one comparison. They
+        # are different scales: sigma runs about -3..+3 while surf.total runs
+        # 0..10, so a naive `sigma if sigma is not None else surf.total` lets
+        # a DATA-FREE hour (whose surf.total sits at the ~1.8 no-data floor)
+        # outrank every real hour, since 1.8 exceeds any plausible sigma.
+        #
+        # That surfaced the first time a window ran past the end of the marine
+        # model: --days 7 returns trailing hours with no swell, and every spot
+        # reported those as its best hour, showing "Flat - stay home" across
+        # the board on a perfectly ordinary forecast.
+        has_data = sigma is not None
+        key = (1, sigma) if has_data else (0, surf.total)
+
         entry = BestHour(ts, cond, surf, rare, sigma, 0)
         if best is None or key > best[0]:
             best = (key, entry)

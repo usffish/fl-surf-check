@@ -749,3 +749,52 @@ def test_best_hour_records_every_day_in_the_window():
     assert len(pick.by_day) >= 4, f"expected 4+ days, got {sorted(pick.by_day)}"
     for entry in pick.by_day.values():
         assert entry.sigma is not None
+
+
+def test_a_data_free_hour_never_outranks_a_real_one():
+    """
+    Regression: `key = sigma if sigma is not None else surf.total` mixed two
+    different scales in one comparison. sigma runs about -3..+3 while
+    surf.total runs 0..10, so an hour with NO swell data - whose surf.total
+    sits at the ~1.8 no-data floor - beat every real hour, because 1.8 exceeds
+    any plausible sigma.
+
+    It surfaced the first time a window ran past the end of the marine model:
+    --days 7 returns trailing hours with no swell, and every spot reported one
+    of those as its best hour, printing "Flat - stay home" across the board on
+    an ordinary forecast.
+    """
+    import datetime as _dt
+    from fl_surf_check.scoring import pick_best_hour
+
+    spot = SPOTS[0]
+    start = int(_dt.datetime(2023, 6, 15, 14, tzinfo=_dt.timezone.utc).timestamp())
+
+    def reading(k, with_data):
+        c = Conditions(
+            wave_height_ft=2.0 if with_data else None,
+            wave_period_s=9.0 if with_data else None,
+            wave_direction_deg=spot.facing_deg if with_data else None,
+            swell_height_ft=2.0 if with_data else None,
+            swell_period_s=9.0 if with_data else None,
+            swell_direction_deg=spot.facing_deg if with_data else None,
+            wind_speed_mph=6.0, wind_direction_deg=spot.offshore_deg,
+        )
+        return (start + k * 3600, c)
+
+    # Real hours first, then a run of data-free ones - the shape --days 7 produces.
+    readings = [reading(k, True) for k in range(4)] + \
+               [reading(k, False) for k in range(4, 10)]
+
+    pick = pick_best_hour(
+        readings, spot, _linear_baseline(),
+        lambda ts, lat, lon: climatology.is_daylight(np.array([float(ts)]), lat, lon)[0],
+        lambda ts, sp: _dt.datetime.fromtimestamp(ts, ZoneInfo(sp.tz)).date())
+
+    assert pick is not None
+    assert pick.sigma is not None, "picked an hour with no rarity data"
+    assert pick.conditions.swell_height_ft is not None, \
+        "picked a data-free hour over real ones"
+    for entry in pick.by_day.values():
+        assert entry.conditions.swell_height_ft is not None, \
+            "a per-day best fell on a data-free hour"

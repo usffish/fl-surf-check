@@ -738,7 +738,7 @@ fl_surf_check/
 
 tests/
 ├── test_scoring.py       # 32 tests on the scoring math
-├── test_climatology.py   # 69 tests on baselines, rarity, value, storms, daylight
+├── test_climatology.py   # 70 tests on baselines, rarity, value, storms, daylight
 ├── test_surflog.py       # 36 tests on the surf log, itch and novelty
 └── test_cli_offline.py   # 23 end-to-end tests with the network mocked
 ```
@@ -756,10 +756,10 @@ python -m pytest tests/ -q
 ```
 
 ```
-160 passed in 3.59s
+161 passed in 3.54s
 ```
 
-All 160 tests run **offline** — network calls are mocked and `build_baseline`
+All 161 tests run **offline** — network calls are mocked and `build_baseline`
 takes an injectable client — so the suite is fast and works in CI. They cover
 the scoring curves (monotonicity, bounds, continuity, Florida-specific tuning),
 the distance decay math, the worth-the-drive blend (including that an epic far
