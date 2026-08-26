@@ -1,0 +1,263 @@
+<title>Code Explanation &#8212; fl-surf-check</title>
+<style>
+  :root{
+    color-scheme: light;
+    --ground:#fbfcfd; --surface:#ffffff; --ink:#12171c; --ink-2:#3d4852; --muted:#69737d;
+    --hair:#e2e8ee; --rule:#eef2f6; --accent:#2a78d6; --accent-soft:rgba(42,120,214,.09);
+    --code-bg:#f4f7fa; --code-ink:#1c2530; --warn:#eb6834; --warn-soft:rgba(235,104,52,.09);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:where(:not([data-theme="light"])){
+      color-scheme: dark;
+      --ground:#12161a; --surface:#191e23; --ink:#eef2f6; --ink-2:#b6c1cb; --muted:#8b959f;
+      --hair:#262c33; --rule:#20262c; --accent:#63a3ee; --accent-soft:rgba(99,163,238,.13);
+      --code-bg:#1d2329; --code-ink:#dbe4ec; --warn:#e8865c; --warn-soft:rgba(232,134,92,.13);
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --ground:#12161a; --surface:#191e23; --ink:#eef2f6; --ink-2:#b6c1cb; --muted:#8b959f;
+    --hair:#262c33; --rule:#20262c; --accent:#63a3ee; --accent-soft:rgba(99,163,238,.13);
+    --code-bg:#1d2329; --code-ink:#dbe4ec; --warn:#e8865c; --warn-soft:rgba(232,134,92,.13);
+  }
+  :root[data-theme="light"]{
+    color-scheme: light;
+    --ground:#fbfcfd; --surface:#ffffff; --ink:#12171c; --ink-2:#3d4852; --muted:#69737d;
+    --hair:#e2e8ee; --rule:#eef2f6; --accent:#2a78d6; --accent-soft:rgba(42,120,214,.09);
+    --code-bg:#f4f7fa; --code-ink:#1c2530; --warn:#eb6834; --warn-soft:rgba(235,104,52,.09);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+  body{margin:0;background:var(--ground);color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.68;
+    -webkit-font-smoothing:antialiased;font-size:16px}
+
+  .layout{max-width:1180px;margin:0 auto;padding:0 24px;display:grid;
+    grid-template-columns:236px minmax(0,1fr);gap:52px;align-items:start}
+  @media (max-width:940px){.layout{grid-template-columns:1fr;gap:0}
+    nav.toc{position:static!important;max-height:none!important;
+      border-right:0!important;border-bottom:1px solid var(--hair);
+      margin-bottom:34px;padding:20px 0 24px!important}}
+
+  nav.toc{position:sticky;top:0;max-height:100vh;overflow-y:auto;
+    padding:56px 18px 40px 0;border-right:1px solid var(--hair);font-size:13.5px}
+  nav.toc .lbl{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;
+    letter-spacing:.13em;text-transform:uppercase;color:var(--muted);margin:0 0 12px;display:block}
+  nav.toc a{display:block;color:var(--ink-2);text-decoration:none;padding:4px 10px;
+    border-radius:6px;border-left:2px solid transparent;line-height:1.4;margin-bottom:1px}
+  nav.toc a:hover{background:var(--accent-soft);color:var(--ink)}
+  nav.toc a.on{color:var(--accent);border-left-color:var(--accent);background:var(--accent-soft);font-weight:600}
+
+  main{padding:56px 0 110px;min-width:0}
+  h1{font-size:clamp(29px,4.2vw,40px);line-height:1.14;letter-spacing:-.022em;
+    margin:0 0 16px;font-weight:660;text-wrap:balance}
+  h2{font-size:23px;letter-spacing:-.014em;margin:56px 0 16px;font-weight:640;
+    scroll-margin-top:24px;text-wrap:balance;padding-top:14px;border-top:1px solid var(--hair)}
+  h2:first-of-type{border-top:0;margin-top:34px}
+  h3{font-size:16.5px;letter-spacing:-.006em;margin:32px 0 10px;font-weight:640;color:var(--ink)}
+  p{margin:0 0 15px;color:var(--ink-2);max-width:68ch}
+  li{color:var(--ink-2);margin-bottom:7px;max-width:66ch}
+  strong{color:var(--ink);font-weight:625}
+  a{color:var(--accent)}
+  .lede{font-size:17.5px;color:var(--ink-2);max-width:64ch}
+  hr{border:0;border-top:1px solid var(--hair);margin:44px 0}
+
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.875em;
+    background:var(--code-bg);color:var(--code-ink);padding:2px 6px;border-radius:5px;
+    border:1px solid var(--hair)}
+  pre{background:var(--code-bg);border:1px solid var(--hair);border-radius:10px;
+    padding:15px 17px;overflow-x:auto;margin:0 0 20px}
+  pre code{background:none;border:0;padding:0;font-size:13px;line-height:1.62;color:var(--code-ink)}
+
+  table{border-collapse:collapse;width:100%;font-size:14.5px;margin:0 0 22px;min-width:440px}
+  .tw{overflow-x:auto;margin-bottom:22px}
+  th,td{text-align:left;padding:9px 14px;border-bottom:1px solid var(--rule);vertical-align:top}
+  thead th{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;
+    letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:500;
+    border-bottom:1px solid var(--hair)}
+  tbody tr:last-child td{border-bottom:0}
+  td:not(:first-child){font-variant-numeric:tabular-nums}
+
+  blockquote{margin:0 0 20px;padding:14px 18px;background:var(--accent-soft);
+    border-left:3px solid var(--accent);border-radius:0 8px 8px 0}
+  blockquote p{margin:0;color:var(--ink)}
+
+  .qa{border-top:1px solid var(--rule);padding-top:18px;margin-top:22px}
+  .qa:first-of-type{border-top:0}
+  .q{font-weight:640;color:var(--ink);margin:0 0 9px;max-width:68ch}
+
+  .callout{background:var(--warn-soft);border-left:3px solid var(--warn);
+    border-radius:0 8px 8px 0;padding:14px 18px;margin:0 0 20px}
+  .callout p:last-child{margin-bottom:0}
+  .callout p{color:var(--ink)}
+
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+</style>
+<div class="layout">
+<nav class="toc"><span class="lbl">Contents</span><a href="#what-problem-are-we-solving">What Problem Are We Solving?</a><a href="#the-one-calculation-that-matters">The One Calculation That Matters</a><a href="#what-is-sigma">What is &quot;Sigma&quot;?</a><a href="#three-numbers-that-describe-a-wave">Three Numbers That Describe a Wave</a><a href="#how-the-code-is-organised">How the Code is Organised</a><a href="#step-1-you-type-a-command">Step 1 &#8212; You type a command</a><a href="#step-2-where-are-you-locationpy">Step 2 &#8212; Where are you? (location.py)</a><a href="#step-3-what-is-the-surf-doing-conditionspy">Step 3 &#8212; What is the surf doing? (conditions.py)</a><a href="#step-4-how-far-is-it-distancepy">Step 4 &#8212; How far is it? (distance.py)</a><a href="#step-5-what-is-normal-for-florida-climatologypy">Step 5 &#8212; What is normal for Florida? (climatology.py)</a><a href="#step-6-score-every-hour-scoringpy">Step 6 &#8212; Score every hour (scoring.py)</a><a href="#step-7-your-surf-log-surflogpy">Step 7 &#8212; Your surf log (surflog.py)</a><a href="#step-8-print-the-table-clipy">Step 8 &#8212; Print the table (cli.py)</a><a href="#why-things-are-shaped-oddly">Why Things Are Shaped Oddly</a><a href="#testing">Testing</a><a href="#common-questions">Common Questions</a></nav>
+<main>
+<h1>Code Explanation &#8212; fl-surf-check</h1>
+<p class="lede">This document explains the whole program in plain language. No prior programming knowledge is assumed, and no surfing knowledge either.</p>
+<p>It is organised as <strong>the path of a single run</strong> rather than file-by-file, because that is the order things actually happen and the order you would follow when debugging. Line references are to the files as of writing.</p>
+<h2 id="what-problem-are-we-solving">What Problem Are We Solving?</h2>
+<p>Checking the surf forecast is easy. Deciding whether to <strong>go</strong> is the hard part.</p>
+<p>A 9/10 day three hours away and a 5/10 day fifteen minutes away are genuinely hard to compare, because they are measured in different units &#8212; one is wave quality, the other is time in a car. Most surf forecasts give you the first number and leave the second entirely to you.</p>
+<p>This tool answers the combined question: <strong>is it worth the drive?</strong> It produces one signed number per spot. Positive means go. The size of the number is your margin.</p>
+<h2 id="the-one-calculation-that-matters">The One Calculation That Matters</h2>
+<p>Everything else in the codebase exists to feed this line:</p>
+<pre><code>value = sigma(surf) + itch - novelty - drive_minutes / minutes_per_sd</code></pre>
+<p>Every term is in the same unit &#8212; <strong>sigma</strong>, standard deviations of surf quality &#8212; so they can be added and subtracted meaningfully. <code>minutes_per_sd</code> (default <strong>120</strong>) is the exchange rate that converts driving time into that unit.</p>
+<div class="tw"><table><thead><tr><th>term</th><th>means</th><th>typical range</th></tr></thead><tbody><tr><td><code>sigma(surf)</code></td><td>how good this is versus Florida&#x27;s historical record</td><td>&#8722;3 to +3</td></tr><tr><td><code>itch</code></td><td>how long since you last surfed</td><td>0 to +2</td></tr><tr><td><code>novelty</code></td><td>how often you have surfed <em>this</em> spot</td><td>0 to +1.5</td></tr><tr><td><code>drive_minutes / 120</code></td><td>the cost of getting there</td><td>0 to +4</td></tr></tbody></table></div>
+<p>If you remember one thing: <strong>one standard deviation of surf is worth two hours of driving.</strong> Two sigma is worth four hours. That is the whole philosophy.</p>
+<h2 id="what-is-sigma">What is &quot;Sigma&quot;?</h2>
+<p>A standard deviation is a measure of how unusual something is compared to normal. Sigma of 0 means &quot;exactly average.&quot; Sigma of +1 means &quot;better than about 84% of days.&quot; Sigma of +2 is roughly the top 2%.</p>
+<p>The tool computes this against <strong>the actual historical record of Florida surf</strong> &#8212; every day since October 2021 &#8212; rather than against an opinion of what &quot;good&quot; means. That is why a 2.8 ft day can be genuinely exceptional here and unremarkable in Hawaii; the yardstick is local.</p>
+<h3>Why sigma and not a 0&#8211;10 score</h3>
+<p>The program also computes a 0&#8211;10 <code>SURF</code> score, and shows it, but does <strong>not</strong> rank on it. A 0&#8211;10 score has no natural zero &#8212; is 5.6/10 worth driving to? You cannot tell without also knowing how far away it is and what &quot;5.6&quot; implies.</p>
+<p>Sigma has a natural zero (average) and, crucially, it can be traded against drive time because both end up in the same unit. That conversion is impossible with an arbitrary 0&#8211;10 scale.</p>
+<h2 id="three-numbers-that-describe-a-wave">Three Numbers That Describe a Wave</h2>
+<p>Only three inputs really matter, and the code weights them accordingly (<code>scoring.py:56</code>):</p>
+<p><strong>Height (35%)</strong> &#8212; how big. The obvious one, and not the most important.</p>
+<p><strong>Period (30%)</strong> &#8212; the seconds between waves. This is the <em>quality</em> signal. Short period (under 6s) means local wind chop: disorganised slop. Long period (12s+) means the swell travelled a long way from a distant storm, arriving organised and powerful. Period is why a 1 ft day at 11 seconds can be better than a 2 ft day at 5 seconds.</p>
+<p><strong>Wind (25%)</strong> &#8212; direction and speed. Wind blowing <em>offshore</em> (from the land out to sea) holds the wave face up and grooms it. Wind blowing <em>onshore</em> pushes the wave over early and turns the surface to chop. Same swell, completely different session.</p>
+<p>The remaining 10% is swell direction &#8212; how squarely the swell hits the beach.</p>
+<h2 id="how-the-code-is-organised">How the Code is Organised</h2>
+<pre><code>fl_surf_check/
+&#9500;&#9472;&#9472; spots.py        41 Florida surf spots: coordinates, which way the beach
+&#9474;                   faces, nearest tide station
+&#9500;&#9472;&#9472; location.py     your zip code -&gt; latitude/longitude
+&#9500;&#9472;&#9472; distance.py     how far and how long the drive is (real road routing)
+&#9500;&#9472;&#9472; conditions.py   fetches the forecast: waves, wind, storms, tides
+&#9500;&#9472;&#9472; climatology.py  builds &quot;what is normal for Florida&quot; from ~6 years of history
+&#9500;&#9472;&#9472; surflog.py      your personal session log (the only thing stored about you)
+&#9500;&#9472;&#9472; scoring.py      all the maths. Pure functions, no network, no files.
+&#9492;&#9472;&#9472; cli.py         ties it together and prints the table</code></pre>
+<p><code>scoring.py</code> does no input or output at all &#8212; no network calls, no file reads. That is deliberate: it makes every calculation testable without touching the internet, which is why the whole test suite runs offline in under four seconds.</p>
+<h2 id="step-1-you-type-a-command">Step 1 &#8212; You type a command</h2>
+<pre><code>python -m fl_surf_check --zip 33613 --days 5</code></pre>
+<p><code>__main__.py</code> hands straight to <code>cli.py:main()</code> (line 541).</p>
+<p>Before anything else, <code>main()</code> checks whether you passed <code>&ndash;surfed</code>. If you did, it records a surf session and exits immediately &#8212; that path needs no zip code and no internet, so it must run before any network work.</p>
+<h2 id="step-2-where-are-you-locationpy">Step 2 &#8212; Where are you? (<code>location.py</code>)</h2>
+<p><code>geocode_zip()</code> (line 78) turns &quot;33613&quot; into latitude 28.077, longitude &#8722;82.445.</p>
+<p>It uses <strong>pgeocode</strong>, an offline database, so after a one-time download this needs no internet. If the zip is not found it falls back to Nominatim (OpenStreetMap&#x27;s geocoder) over the network, and raises <code>GeocodeError</code> if that fails too.</p>
+<h2 id="step-3-what-is-the-surf-doing-conditionspy">Step 3 &#8212; What is the surf doing? (<code>conditions.py</code>)</h2>
+<h3>One request, not forty-one</h3>
+<p><code>fetch_marine_and_wind()</code> (line 151) gets the forecast for <strong>all 41 spots in two API calls</strong>, not 82. Open-Meteo accepts a comma-separated list of coordinates, so one request covers every spot.</p>
+<p>It fetches:</p>
+<ul><li><strong>From the marine API</strong> &#8212; wave height, period, direction, and separately the <em>swell partition</em> (see below)</li><li><strong>From the weather API</strong> &#8212; wind speed and direction, weather code, CAPE, and precipitation probability (the last three are for thunderstorm detection)</li></ul>
+<h3>Two wave measurements, used for different jobs</h3>
+<p>The marine API reports two different things, and the distinction matters:</p>
+<ul><li><strong>Total sea state</strong> &#8212; everything in the water, including local wind chop</li><li><strong>Swell partition</strong> &#8212; just the organised groundswell, chop removed</li></ul>
+<p>The 0&#8211;10 <code>SURF</code> score reads the total. Rarity and the historical baseline read the <strong>swell</strong>, because chop is not rideable and would inflate the numbers.</p>
+<p>This was validated against the National Weather Service forecast: NWS said &quot;east 1 foot at 9 seconds&quot;; Open-Meteo&#x27;s swell read 1.12 ft at 7.9 s, while the total read 1.31 ft at 7.25 s with 0.66 ft of 1.7 s sea-breeze chop mixed in.</p>
+<h3>It returns a window, not a moment</h3>
+<p>The function returns <strong>a list of hourly readings</strong>, not a single reading. This is not incidental &#8212; see &quot;Why the best hour, not the current hour&quot; below.</p>
+<h3>Rate limits are not retried</h3>
+<p><code>_with_retry()</code> deliberately does <strong>not</strong> retry when Open-Meteo says you are rate-limited. Its limit is per-<em>minute</em>, so a sub-second backoff can never outlast it, and each extra attempt spends more of the quota you have already run out of. It fails fast with an accurate message instead.</p>
+<h2 id="step-4-how-far-is-it-distancepy">Step 4 &#8212; How far is it? (<code>distance.py</code>)</h2>
+<p><code>get_drive_estimate()</code> (line 49) asks the <strong>OSRM</strong> public routing server for real driving distance and time &#8212; actual roads, not straight lines. A 41-spot run is 41 routes, done in parallel, and takes about a second.</p>
+<p>If OSRM is unreachable it falls back to straight-line distance &#215; 1.25 (roads are never straight) at an assumed 50 mph, and the result is flagged so the CLI can print <code>~</code> beside it. Degrading is better than crashing.</p>
+<h2 id="step-5-what-is-normal-for-florida-climatologypy">Step 5 &#8212; What is normal for Florida? (<code>climatology.py</code>)</h2>
+<p>This is the piece that makes &quot;unusually good&quot; mean something.</p>
+<h3>What it builds</h3>
+<p><code>build_baseline()</code> (line 255) downloads <strong>every day of marine history since 1 October 2021</strong> for all 41 spots in one batched request, and reduces it to a single distribution:</p>
+<pre><code>FL normal 1.5ft/7s, good 3.5ft/9s (1787d over 6yr, 41 spots)</code></pre>
+<p>Today&#x27;s swell is then located in that distribution &#8212; the <code>VS NORM</code> column.</p>
+<h3>Four decisions worth understanding</h3>
+<p><strong>Daily maxima, not hourly samples.</strong> A three-day swell contributes 72 highly correlated hours. Treating those as 72 independent observations would badly overstate how much evidence you have. Each day is reduced to its best hour first.</p>
+<p><strong>Night is excluded.</strong> You cannot surf in the dark, so 3am swell must not set &quot;normal&quot; or supply a day&#x27;s maximum. The cutoff uses real solar geometry (<code>is_daylight()</code>, line 237), not fixed clock hours, because Florida&#x27;s daylight swings about three hours between solstices. It is validated against published sunrise/sunset times to within 8 minutes.</p>
+<p>The threshold is <strong>civil twilight (&#8722;6&#176;), not true sunrise</strong> &#8212; first light is when Florida&#x27;s wind is calmest and most offshore, so a 0&#176; cutoff would discard the best hour of many days.</p>
+<p><strong>One statewide baseline, not one per spot.</strong> Grading each break on its own curve would flatter the weak ones &#8212; a mediocre Pensacola day would read &quot;p90&quot; beside a genuinely excellent Sebastian Inlet day, because each is only compared to itself. Since the whole point is choosing <em>where to drive</em>, they need one shared yardstick.</p>
+<p><strong>Not seasonal.</strong> An earlier version windowed the baseline to &#177;14 days around today. That was removed: it now pools every day regardless of time of year. The tradeoff is real &#8212; winter nor&#x27;easters pull the distribution up, so a typical August day now reads as somewhat below normal &#8212; but &quot;normal&quot; stops shifting meaning with the calendar.</p>
+<h3>Why it is cached for 30 days</h3>
+<p>The history request is millions of samples. Running it every invocation trips Open-Meteo&#x27;s per-minute rate limit, which then <strong>starves the live conditions request in the same run</strong>, silently dropping every spot to its no-data floor. The cache (<code>.fl_surf_climatology.json</code>) is what prevents that.</p>
+<h2 id="step-6-score-every-hour-scoringpy">Step 6 &#8212; Score every hour (<code>scoring.py</code>)</h2>
+<h3>The 0&#8211;10 score</h3>
+<p><code>score_conditions()</code> (line 247) combines four sub-scores using the weights above. Each is a piecewise-linear curve with explicit control points (<code>HEIGHT_CURVE</code> line 88, <code>PERIOD_CURVE</code> line 102, <code>WIND_PENALTY_CURVE</code> line 114), so they are easy to read and easy to tune.</p>
+<p>The height curve is <strong>tuned for Florida</strong>: it peaks at 5 ft and <em>eases back above 7 ft</em>, where Florida&#x27;s sandbars close out rather than improve. These three curves are the only region-specific part of the scoring.</p>
+<h3>Rarity: log-space sigma</h3>
+<p><code>rarity_score()</code> compares today&#x27;s swell to the baseline. The comparison is done in <strong>log space</strong> &#8212; meaning the logarithm is taken before computing mean and standard deviation.</p>
+<p>This is not decoration. Raw swell height is heavily right-skewed (skew 1.96): mostly small days with a long thin tail of hurricanes. Applied to that, a plain standard deviation misbehaves badly:</p>
+<div class="tw"><table><thead><tr><th></th><th>raw feet</th><th>log space</th></tr></thead><tbody><tr><td>skew</td><td>1.96</td><td>&#8722;0.12</td></tr><tr><td>z = 0 lands at</td><td>p62</td><td>p50</td></tr><tr><td>+1 SD</td><td>p89</td><td>p83.5</td></tr><tr><td>biggest day on record</td><td>z <strong>+9.7</strong></td><td>z <strong>+3.4</strong></td></tr></tbody></table></div>
+<p>Two concrete failures on the left: &quot;zero standard deviations from average&quot; lands at the 62nd percentile &#8212; the mean is not the middle. And the biggest day ever becomes +9.7 sigma, which at 120 min/sigma would justify a <strong>nineteen-hour drive</strong>.</p>
+<p>The intuition: logs turn multiplication into addition, so log space measures <em>ratios</em> rather than differences. The gap between 1 ft and 2 ft is a doubling and feels enormous; between 11 ft and 12 ft it is marginal. Raw arithmetic calls both &quot;one foot.&quot;</p>
+<h3>Why the best hour, not the current hour</h3>
+<p><code>pick_best_hour()</code> scores <strong>every surfable hour in the forecast window</strong> and reports the best, rather than whatever hour you happened to run the command.</p>
+<p>Two reasons. First, the comparison would otherwise be unfair: the baseline is built from each day&#x27;s <em>best</em> hour, so scoring it against an arbitrary current hour is apples-to-oranges. Measured, a randomly chosen hour scored a median of <strong>p34</strong> against that baseline when it should average p50 &#8212; a systematic 16-point understatement.</p>
+<p>Second, and more usefully, Florida&#x27;s wind swings hard through the day. Measured at Cocoa Beach over July&#8211;August, the sea breeze rotates from 232&#176; at 05:00 (offshore) to 125&#176; by 15:00 (onshore), roughly doubling in speed. Same swell, very different surf. So the honest answer is often <em>&quot;not now, but tomorrow at 11&quot;</em> &#8212; which is what the <code>BEST</code> column tells you.</p>
+<h3>Thunderstorms are a gate, not a penalty</h3>
+<p>Rain does not stop anyone surfing. Lightning does &#8212; and a surfer is the tallest conductive object on a flat wet plain.</p>
+<p>So storm risk is deliberately <strong>not</strong> folded into the 0&#8211;10 score. A perfect 8 ft swell under a squall line is not &quot;slightly worse surf,&quot; it is surf you must not paddle out into. <code>storm_risk()</code> reports it separately, it forfeits any drive allowance, and an active storm overrides the verdict entirely.</p>
+<p>Risk requires <strong>both</strong> instability (CAPE) and precipitation probability: high CAPE on a dry day is a loaded gun with no trigger, and heavy rain with no instability is just rain.</p>
+<h2 id="step-7-your-surf-log-surflogpy">Step 7 &#8212; Your surf log (<code>surflog.py</code>)</h2>
+<p>The only thing the program stores about <strong>you</strong>. Everything else it caches describes Florida and is identical for every user.</p>
+<pre><code>python -m fl_surf_check --surfed &quot;apollo&quot;              # today
+python -m fl_surf_check --surfed &quot;ponce&quot; --on 2026-08-18</code></pre>
+<p>Stored as JSON at <code>~/.fl_surf_log.json</code> &#8212; <strong>outside the repository</strong>, and gitignored regardless. It is a record of where you go and when, which does not belong in a public repo. Writes are atomic (temp file, then rename) so an interrupted write cannot truncate your history.</p>
+<p>Spot names are fuzzy-matched, so <code>apollo</code> finds <code>Apollo Beach (Canaveral NS)</code>. But an unrecognised name is <strong>refused, not guessed</strong> &#8212; a wrong guess silently logs a session against the wrong break and quietly skews everything downstream.</p>
+<h3>Itch &#8212; days since you last surfed</h3>
+<pre><code>itch = days_since_last &#215; 0.05</code></pre>
+<p>Linear and uncapped. A week out of the water is worth about 42 minutes of extra driving; a month about three hours.</p>
+<p><strong>It never changes the ranking.</strong> It is identical for every spot, so it slides the whole board and moves the go/no-go line without reordering anything &#8212; which is exactly &quot;make me more willing to drive,&quot; as distinct from &quot;send me somewhere different.&quot;</p>
+<p>An empty log means <strong>zero itch, not infinite</strong>. A fresh install should not open by demanding you drive across the state.</p>
+<h3>Novelty &#8212; how often you have surfed each spot</h3>
+<p>A z-score of visit counts across all 41 spots, so spots you keep returning to get handicapped and neglected ones surface. <strong>This one does reorder.</strong></p>
+<p>Two corrections to a plain z-score, both for measured reasons:</p>
+<p><strong>Log-transform first.</strong> Visit counts are severely zero-inflated &#8212; most spots at zero, a few high. On a realistic 200-session log, raw counts penalise the most-surfed spot <strong>1.7&#215; harder</strong> than log space does, and a home break&#x27;s penalty runs away without bound.</p>
+<p><strong>Shrink by evidence</strong> &#8212; <code>n / (n + 20)</code>. Even in log space, a young log produces huge z values simply because almost everything is zero: a single logged session has a raw z of <strong>+6.3</strong>, which at 120 min/sigma is a <em>twelve-hour</em> handicap from one surf.</p>
+<p>Worth knowing which correction does what, because it is counterintuitive: the log transform does <strong>nothing</strong> for the single-session case &#8212; log and raw give an identical z there. It is the <em>shrinkage</em> that rescues that. The log earns its place on mature lopsided logs.</p>
+<h2 id="step-8-print-the-table-clipy">Step 8 &#8212; Print the table (<code>cli.py</code>)</h2>
+<p><code>filter_and_sort()</code> (line 237) applies any filters and sorts by value score. <code>render()</code> (line 330) formats the table.</p>
+<pre><code>#  SPOT                  VALUE  SURF        BEST   DRIVE   COST     VS NORM   VERDICT
+1  Ponce Inlet           +0.80   5.3   Mon 18:00     24m  -0.20   p52 +0.0s   Worth the drive</code></pre>
+<div class="tw"><table><thead><tr><th>column</th><th>meaning</th></tr></thead><tbody><tr><td><code>VALUE</code></td><td>the answer. Positive = worth going</td></tr><tr><td><code>SURF</code></td><td>the 0&#8211;10 absolute score, for context</td></tr><tr><td><code>BEST</code></td><td>which hour these numbers describe, in the spot&#x27;s local time</td></tr><tr><td><code>DRIVE</code></td><td>real road driving time</td></tr><tr><td><code>COST</code></td><td>that drive converted to sigma</td></tr><tr><td><code>VS NORM</code></td><td>percentile and sigma against the historical record</td></tr></tbody></table></div>
+<h2 id="why-things-are-shaped-oddly">Why Things Are Shaped Oddly</h2>
+<p>This section exists because several parts of this code look over-engineered until you know what they are defending against. Each of these was a real bug.</p>
+<p><strong>Distance is not z-scored.</strong> It would be natural to standardise drive time the same way swell is. It breaks the calibration: measured against the shipped spot list, a distance z of &#8722;1.0 is 30 miles from Daytona but 109 miles from Tampa. If &quot;one sigma closer&quot; means two different drives, it cannot be worth a fixed number of minutes. Raw minutes keep the units absolute.</p>
+<p><strong>Sigma is monotonic in height, on purpose.</strong> The absolute height curve rolls off above 7 ft, but rarity does not (<code>APPLY_CLOSEOUT_ROLLOFF = False</code>, line 436). So <code>SURF</code> and <code>VALUE</code> will disagree on very large days. That is intentional &#8212; the size at which a break stops being fun depends on who is paddling out.</p>
+<p><strong>Rarity labels are relative, not fixed percentiles.</strong> Shrinkage imposes a ceiling on the attainable percentile. When labels were fixed cutoffs (&#8805;93, &#8805;97) and the ceiling sat near p91, the top two labels were <strong>dead code no input could produce</strong>. They are now fractions of the attainable range.</p>
+<p><strong>The flat-column guard uses a tolerance, not <code>sd &lt;= 0</code>.</strong> When every spot has the same visit count the spread is mathematically zero &#8212; but summing N identical floats and dividing leaves the mean off by ~1e-16, so <code>sd</code> lands <em>near</em> zero rather than on it. Dividing by that conjures <code>z = &#177;1.0</code> from rounding noise. Platform-dependent: CI failed on a value that the development machine computed as exactly 0.0.</p>
+<p><strong>The best-hour ranking uses a tuple key.</strong> It reads <code>(1, sigma)</code> for hours with data and <code>(0, surf.total)</code> for those without. A single expression mixing the two &#8212; <code>sigma if sigma is not None else surf.total</code> &#8212; compares scales that do not match: sigma runs &#8722;3 to +3, <code>surf.total</code> runs 0 to 10. A <strong>data-free</strong> hour scores ~1.8 on the 0&#8211;10 scale and beat every real hour. It surfaced the first time a window ran past the end of the marine model (<code>&ndash;days 7</code>), and every spot reported &quot;Flat - stay home&quot; on an ordinary forecast.</p>
+<p><strong>Tides are keyed by (station, timezone).</strong> NOAA returns times in the station&#x27;s own local time. Comparing those against a naive <code>datetime.now()</code> is only correct when the two happen to match. Florida spans two timezones, and Pensacola once reported the <em>next morning&#x27;s</em> high tide instead of an imminent low &#8212; 13 hours wrong, with the tide state inverted.</p>
+<h2 id="testing">Testing</h2>
+<pre><code>python -m pytest tests/ -q</code></pre>
+<p>All tests run <strong>offline</strong> &#8212; network calls are mocked and <code>build_baseline</code> takes an injectable client &#8212; so the suite is fast and works in CI.</p>
+<div class="tw"><table><thead><tr><th>file</th><th>covers</th></tr></thead><tbody><tr><td><code>test_scoring.py</code></td><td>the scoring curves: monotonicity, bounds, Florida tuning</td></tr><tr><td><code>test_climatology.py</code></td><td>baselines, rarity, solar geometry, storms, the value score</td></tr><tr><td><code>test_surflog.py</code></td><td>the log, itch, novelty</td></tr><tr><td><code>test_cli_offline.py</code></td><td>end-to-end runs with the network mocked</td></tr></tbody></table></div>
+<h3>One habit worth copying</h3>
+<p>Several tests here were written as regression tests, then <strong>verified to fail when the fix was reverted</strong>. That matters: one test in this repo was originally written to cover the log transform, passed with the log transform deleted, and had to be re-pointed at what it actually covered (the shrinkage).</p>
+<p>A regression test that cannot fail is worse than no test &#8212; it is a false reassurance.</p>
+<h2 id="common-questions">Common Questions</h2>
+<div class="qa"><p class="q"><strong>Q: Why does it recommend a spot with worse surf than another one?</strong></p>
+<p>Because <code>VALUE</code> is not surf quality &#8212; it is surf quality <em>minus the drive</em>. A 5.3 twenty-four minutes away routinely beats a 6.2 three hours away. The <code>SURF</code> column is shown precisely so you can see when this is happening.</p></div>
+<div class="qa"><p class="q"><strong>Q: Why is the top spot&#x27;s <code>VALUE</code> negative?</strong></p>
+<p>Nothing is worth the drive today. That is a real answer, not a failure. Use <code>&ndash;worth-only</code> to hide everything negative.</p></div>
+<div class="qa"><p class="q"><strong>Q: Why does it keep saying &quot;below normal&quot; when the forecast looks fine?</strong></p>
+<p><code>below normal</code> fires at roughly p20 or worse &#8212; the bottom fifth of everything Florida has produced since 2021. It is a comment on the swell against history, not on whether the trip makes sense. A spot can be <code>below normal</code> and still rank well because it is close.</p></div>
+<div class="qa"><p class="q"><strong>Q: The first run took ages. Is it broken?</strong></p>
+<p>No. The first run builds the historical baseline (millions of samples) and downloads the zip-code database. Subsequent runs use the cache and take a few seconds.</p></div>
+<div class="qa"><p class="q"><strong>Q: Why does <code>&ndash;days 7</code> sometimes show fewer usable days than <code>&ndash;days 5</code>?</strong></p>
+<p>Seven days is the marine model&#x27;s hard limit, and the window starts at the current hour &#8212; so a 168-hour request runs off the end and the tail comes back empty. The tool handles this correctly now, but the far end of a 7-day forecast is genuinely thinner than the near end.</p></div>
+<div class="qa"><p class="q"><strong>Q: How much should I trust day 5 of the forecast?</strong></p>
+<p>Less than day 1. Florida swell decorrelates quickly &#8212; the day-over-day correlation of daily-max swell height is 0.74 at one day but 0.26 by four. The tool says so in the output for runs of four days or more. Treat the far end as a plan, not a promise.</p></div>
+<div class="qa"><p class="q"><strong>Q: I surfed but forgot to log it. Does that matter?</strong></p>
+<p>Yes, and nothing can detect it. Novelty will think you have never surfed a spot you go to weekly, and itch will keep climbing as though you have been dry. Both factors are worth exactly as much as your logging discipline. <code>&ndash;no-personal</code> turns them off if the log drifts out of date.</p></div>
+<div class="qa"><p class="q"><strong>Q: Can I use this outside Florida?</strong></p>
+<p>Not as-is &#8212; the spot list is hardcoded and the scoring curves encode &quot;Florida beach break.&quot; The data sources are all global, so the plumbing would work, but the curves would need re-tuning. See &quot;Adding another region later&quot; in the README, which includes measured Pacific Northwest numbers showing the Florida height curve inverting on that coast.</p></div>
+<div class="qa"><p class="q"><strong>Q: Why is <code>scoring.py</code> the biggest file with no imports beyond <code>math</code>?</strong></p>
+<p>Deliberate. It contains every calculation and no input/output, so all of it is testable without a network or a filesystem. That is what lets 161 tests run offline in under four seconds &#8212; and it is why numpy was kept out of it even where numpy would have been convenient.</p></div>
+</main>
+</div>
+<script>
+// highlight the section currently on screen
+const links = [...document.querySelectorAll('nav.toc a')];
+const map = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
+const seen = new Set();
+const io_ = new IntersectionObserver(es => {
+  es.forEach(e => e.isIntersecting ? seen.add(e.target.id) : seen.delete(e.target.id));
+  const first = [...document.querySelectorAll('main h2')].find(h => seen.has(h.id));
+  links.forEach(a => a.classList.remove('on'));
+  if (first && map.has(first.id)) map.get(first.id).classList.add('on');
+}, {rootMargin: '0px 0px -70% 0px'});
+document.querySelectorAll('main h2').forEach(h => io_.observe(h));
+</script>
