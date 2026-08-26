@@ -709,10 +709,12 @@ no build step.
 - **`swell-distribution.html`** — the pooled statewide swell-height and
   -period distributions, plus the raw-vs-log comparison behind the geometric
   σ (why standard deviation is measured on `log(height)`, not height itself).
-- **`CODE_EXPLANATION.html`** — a plain-language walkthrough of the whole
-  codebase, organised as the path of a single run rather than file-by-file.
-  Includes a "why things are shaped oddly" section documenting the bugs that
-  produced several of the stranger-looking design decisions.
+- **`CODE_EXPLANATION.html`** — a function-by-function walkthrough of the
+  actual code, organised as the path of a single run. Written for someone who
+  reads basic Python but may not know its idioms, and who already knows what a
+  z-score is — so it explains `@dataclass`, generator expressions and tuple
+  comparison, not statistics. Throughout, it flags the bugs that produced
+  several of the stranger-looking lines.
 - **`florida-surf-spots.html`** — all 41 spots on a real Florida coastline,
   shaded by the tool's own value score from a specific origin (33613), not by
   raw surf quality. Jupiter Inlet has the best swell in the state and still
