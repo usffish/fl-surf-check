@@ -61,6 +61,8 @@ Use `--days 5` to plan a weekend rather than an afternoon.
 ```bash
 git clone https://github.com/usffish/fl-surf-check.git
 cd fl-surf-check
+python3 -m venv .venv
+source .venv/bin/activate     # every new shell needs this before running the tool
 pip install -r requirements.txt
 
 python -m fl_surf_check --zip 32118
@@ -75,6 +77,11 @@ python -m fl_surf_check --days 5
 ```
 
 No API keys. No signup. No accounts. Every data source used is free and public.
+
+**`ModuleNotFoundError: No module named 'geopy'` (or similar)** means the venv
+isn't active - you're running a different Python (e.g. base conda) that never
+had `pip install -r requirements.txt` run against it. Run
+`source .venv/bin/activate` first, in every new terminal session.
 
 **First run needs internet** to download the zip-code database (a few MB, via
 `pgeocode`). After that the zip lookup is fully offline.
@@ -109,6 +116,11 @@ python -m fl_surf_check --zip ZIP [options]
 | `--no-personal` | off | Ignore the surf log for this run. |
 | `--no-history` | off | Skip the statewide historical baseline. `VALUE` and `VS NORM` fall back to `-`. |
 | `--refresh-history` | off | Force-rebuild the cached baseline. Rarely needed — it refreshes itself every 30 days. |
+
+A run prints a status line to stderr before each network step (forecasts, tides,
+drive times, baseline), so a slow OSRM or Open-Meteo response looks like it's
+working rather than hung. Stdout carries only the results table, so piping
+`fl-surf-check ... > out.txt` still gets a clean file.
 
 ### Examples
 

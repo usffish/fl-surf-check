@@ -131,17 +131,24 @@ examples:
     return parser
 
 
+def _progress(msg):
+    """One status line to stderr, matching the "Checking N spots" line in main()."""
+    print(f"  {msg}", file=sys.stderr)
+
+
 def gather(origin, args):
     """Fetch conditions, tides and drive times for every spot."""
     spots = list(SPOTS)
 
     # One batched request each for waves and wind, covering all spots.
+    _progress("Fetching wave & wind forecasts...")
     conditions = fetch_marine_and_wind(spots, hours_ahead=args.days * 24)
 
     session = requests.Session()
 
     # Tides: one request per unique NOAA station (not per spot).
     if not args.no_tides:
+        _progress("Fetching tide predictions...")
         # Key by (station, tz): NOAA returns times in the station's own local
         # time, so the timezone is part of what identifies a tide lookup.
         stations = sorted({(s.tide_station, s.tz) for s in spots})
@@ -160,6 +167,7 @@ def gather(origin, args):
                 c.next_tide = label
 
     # Drive times, in parallel (OSRM demo server, one route per spot).
+    _progress(f"Estimating drive times to {len(spots)} spots...")
     drives = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
         futures = {
@@ -176,6 +184,7 @@ def gather(origin, args):
     # request in the same run and drops every spot to its no-data floor.
     baseline = None
     if not args.no_history:
+        _progress("Loading historical baseline...")
         baseline = load_baseline(spots, force_refresh=args.refresh_history)
 
     def _local_date(ts, spot):
