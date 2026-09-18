@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fl-surf-check</title>
+<style>
+  :root {
+    --bg: #f6f7f5;
+    --panel: #ffffff;
+    --ink: #16211c;
+    --ink-muted: #5b6b62;
+    --border: #dde3de;
+    --accent: #0e7a5f;
+    --accent-ink: #ffffff;
+    --good: #0e7a5f;
+    --warn: #b8791c;
+    --bad: #a13d3d;
+    --storm: #7a1f1f;
+    --storm-bg: #fbe9e9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101512;
+      --panel: #171d19;
+      --ink: #e7ece8;
+      --ink-muted: #93a49b;
+      --border: #2a332d;
+      --accent: #35c295;
+      --accent-ink: #06140f;
+      --good: #35c295;
+      --warn: #e0a53d;
+      --bad: #e07070;
+      --storm: #ffb4b4;
+      --storm-bg: #3a1414;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  main {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 32px 20px 64px;
+  }
+  h1 {
+    font-size: 22px;
+    letter-spacing: -0.01em;
+    margin: 0 0 4px;
+  }
+  .tagline {
+    color: var(--ink-muted);
+    margin: 0 0 24px;
+    font-size: 14px;
+  }
+  form {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px 20px;
+    align-items: end;
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .field label {
+    font-size: 12px;
+    color: var(--ink-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  input[type="text"], input[type="number"] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 9px;
+    color: var(--ink);
+    font: inherit;
+    width: 8em;
+  }
+  input#zip { width: 7em; }
+  .checks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    align-items: center;
+  }
+  .checks label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--ink-muted);
+  }
+  button {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border: none;
+    border-radius: 6px;
+    padding: 9px 18px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { opacity: 0.9; }
+
+  .error {
+    margin-top: 18px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: var(--storm-bg);
+    color: var(--storm);
+    font-size: 14px;
+  }
+  .storm-banner {
+    margin-top: 18px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: var(--storm-bg);
+    color: var(--storm);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .summary {
+    margin-top: 22px;
+    color: var(--ink-muted);
+    font-size: 14px;
+  }
+  .summary strong { color: var(--ink); }
+  .meta-line {
+    margin-top: 4px;
+    color: var(--ink-muted);
+    font-size: 13px;
+  }
+
+  .table-wrap {
+    margin-top: 16px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow-x: auto;
+    background: var(--panel);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+    font-size: 13.5px;
+  }
+  th, td {
+    padding: 10px 12px;
+    text-align: right;
+    white-space: nowrap;
+  }
+  th:first-child, td:first-child,
+  th:nth-child(2), td:nth-child(2),
+  th:last-child, td:last-child {
+    text-align: left;
+  }
+  th {
+    color: var(--ink-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+    border-bottom: 1px solid var(--border);
+  }
+  tbody tr:not(:last-child) td { border-bottom: 1px solid var(--border); }
+  tbody tr.storm-row { background: var(--storm-bg); }
+  .val-pos { color: var(--good); font-weight: 600; }
+  .val-neg { color: var(--bad); }
+  .flag {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    vertical-align: middle;
+  }
+  .empty {
+    margin-top: 22px;
+    color: var(--ink-muted);
+  }
+  footer {
+    margin-top: 28px;
+    color: var(--ink-muted);
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>fl-surf-check</h1>
+  <p class="tagline">{{ n_spots }} Florida spots, ranked by whether they're worth the drive.</p>
+
+  <form method="get" action="/">
+    <div class="field">
+      <label for="zip">Zip code</label>
+      <input id="zip" type="text" name="zip" value="{{ form.zip }}" placeholder="33613" required>
+    </div>
+    <div class="field">
+      <label for="days">Days ahead</label>
+      <input id="days" type="number" name="days" value="{{ form.days }}" min="1" max="7">
+    </div>
+    <div class="field">
+      <label for="top">Show top</label>
+      <input id="top" type="number" name="top" value="{{ form.top }}" min="0">
+    </div>
+    <div class="field">
+      <label for="minutes_per_sd">Min / σ</label>
+      <input id="minutes_per_sd" type="number" name="minutes_per_sd" value="{{ form.minutes_per_sd }}" min="1">
+    </div>
+    <div class="checks">
+      <label><input type="checkbox" name="worth_only" {{ 'checked' if form.worth_only }}> Worth it only</label>
+      <label><input type="checkbox" name="rare_only" {{ 'checked' if form.rare_only }}> Rare days only</label>
+      <label><input type="checkbox" name="no_tides" {{ 'checked' if form.no_tides }}> Skip tides</label>
+      <label><input type="checkbox" name="no_history" {{ 'checked' if form.no_history }}> Skip history</label>
+    </div>
+    <button type="submit">Check surf</button>
+  </form>
+
+  {% if error %}
+    <div class="error">{{ error }}</div>
+  {% endif %}
+
+  {% if origin %}
+    <div class="summary">
+      From <strong>{{ origin.label }}</strong>
+      {% if rows %} &middot; {{ rows|length }} spot{{ 's' if rows|length != 1 else '' }} shown{% endif %}
+    </div>
+    {% if meta and meta.sessions %}
+      <div class="meta-line">
+        {{ meta.sessions }} session{{ 's' if meta.sessions != 1 else '' }} logged
+        {% if meta.days_since is not none %} &middot; last surfed {{ meta.days_since }}d ago{% endif %}
+        {% if meta.itch and meta.itch|abs > 0.005 %} &middot; itch {{ '%+.2f'|format(meta.itch) }}σ to every spot{% endif %}
+      </div>
+    {% endif %}
+
+    {% if storms %}
+      <div class="storm-banner">
+        ⚡ Active lightning risk at {{ storms|length }} spot{{ 's' if storms|length != 1 else '' }}:
+        {{ storms[:4]|join(', ') }}{{ '…' if storms|length > 4 else '' }} &mdash; rain is fine, lightning is not.
+      </div>
+    {% endif %}
+
+    {% if rows %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th><th>Spot</th><th>Value</th><th>Surf</th><th>Best</th>
+              <th>Drive</th><th>vs norm</th><th>Verdict</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+            <tr class="{{ 'storm-row' if r.storm == 'active' }}">
+              <td>{{ loop.index }}</td>
+              <td>{{ r.name }}</td>
+              <td class="{{ 'val-pos' if r.value.startswith('+') else ('val-neg' if r.value.startswith('-') else '') }}">{{ r.value }}</td>
+              <td>{{ r.surf }}</td>
+              <td>{{ r.best }}</td>
+              <td>{{ r.drive }}</td>
+              <td>{{ r.vs_norm }}</td>
+              <td>{{ r.verdict }}{% if r.flag and r.storm != 'active' %}<span class="flag">{{ r.flag }}</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="empty">No spots matched. Try relaxing the filters.</p>
+    {% endif %}
+  {% endif %}
+
+  <footer>VALUE = surf (SDs above normal) &minus; drive time, at the σ rate above. Positive means worth going.</footer>
+</main>
+</body>
+</html>

@@ -336,6 +336,26 @@ def _bar(score: float, width: int = 10) -> str:
     return "#" * filled + "." * (width - filled)
 
 
+def compute_verdict(r) -> str:
+    """
+    The verdict shown for one row, storm overrides included.
+
+    Pulled out of render() so the web UI can show the identical verdict a
+    terminal run would - one decision, not two copies that could drift.
+
+    An active thunderstorm overrides the verdict outright. Leaving "GO. Drop
+    everything" next to a lightning warning is worse than useless - the two
+    lines contradict each other and the wrong one is louder.
+    """
+    val, worth = r["value"], r["worth"]
+    verdict = val.verdict if val.total is not None else worth.verdict
+    if r["storm"] == "active":
+        return "LIGHTNING - do not paddle out"
+    if r["storm"] == "likely":
+        return f"{verdict} (storms likely)"
+    return verdict
+
+
 def render(rows, origin, args, meta=None) -> str:
     lines = []
     lines.append("")
@@ -399,7 +419,7 @@ def render(rows, origin, args, meta=None) -> str:
     lines.append("  " + "-" * 92)
 
     for i, r in enumerate(rows, 1):
-        spot, drive, surf, worth = r["spot"], r["drive"], r["surf"], r["worth"]
+        spot, drive, surf = r["spot"], r["drive"], r["surf"]
         name = spot.name if len(spot.name) <= 24 else spot.name[:21] + "..."
         approx = "~" if drive.is_estimate else " "
         rare, val = r["rarity"], r["value"]
@@ -408,15 +428,7 @@ def render(rows, origin, args, meta=None) -> str:
             rare_cell += f" {rare.sigma:+.1f}s"
         val_cell = f"{val.total:+.2f}" if val.total is not None else "-"
         flag = rare.label()
-
-        # An active thunderstorm overrides the verdict outright. Leaving "GO.
-        # Drop everything" next to a lightning warning is worse than useless -
-        # the two lines contradict each other and the wrong one is louder.
-        verdict = val.verdict if val.total is not None else worth.verdict
-        if r["storm"] == "active":
-            verdict = "LIGHTNING - do not paddle out"
-        elif r["storm"] == "likely":
-            verdict = f"{verdict} (storms likely)"
+        verdict = compute_verdict(r)
         lines.append(
             f"  {i:<3}{name[:24]:<26}"
             f"{val_cell:>7}{surf.total:>6.1f}{_local_hhmm(r):>12}"

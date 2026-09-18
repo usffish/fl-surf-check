@@ -21,3 +21,8 @@ geopy>=2.4
 # Open-Meteo's own examples. It is GPLv3+ (copyleft); a 10-line retry helper
 # in conditions.py keeps this project permissively licensed. See
 # SECURITY-REVIEW.md.
+
+# Local web UI (fl_surf_check.webapp) - a thin wrapper over the same CLI
+# pipeline, served only on localhost.
+# https://github.com/pallets/flask  (BSD-3-Clause)
+flask>=3.0

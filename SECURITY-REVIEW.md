@@ -29,6 +29,7 @@ For each candidate package and repository:
 | `requests-cache` | 1.3.3 | BSD-2-Clause | none | Clean. One `base64.b64decode` in `serializers/preconf.py`, used to deserialize cached binary response bodies — expected and benign for a cache library. |
 | `pgeocode` | 0.5.0 | BSD-3-Clause | `download.geonames.org`, `symerio.github.io` | Clean. Downloads a postal-code dataset once, then works offline. |
 | `geopy` | 2.5.0 | MIT | per-geocoder, only when called | Clean. Only the Nominatim geocoder is used, and only as a fallback. |
+| `flask` | 3.1.3 | BSD-3-Clause | none - dev server binds to localhost only, no outbound calls | Clean. Widely audited; the app (`webapp.py`) is a thin route layer over `cli.py`, no new scoring or fetch logic. Transitive deps (Werkzeug, Jinja2, MarkupSafe, itsdangerous, click, blinker) are all BSD/MIT. |
 
 No dangerous primitives were found in any accepted dependency.
 

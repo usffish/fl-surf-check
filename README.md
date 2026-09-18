@@ -37,6 +37,7 @@ Use `--days 5` to plan a weekend rather than an afternoon.
 
 - [Quick start](#quick-start)
 - [Usage](#usage)
+- [Web UI](#web-ui)
 - [How the surf score works](#how-the-surf-score-works)
 - [The value calculation](#the-value-calculation)
 - [Planning several days ahead](#planning-several-days-ahead)
@@ -149,6 +150,31 @@ python -m fl_surf_check --zip 32118 --minutes-per-sd 60
 # Rank on raw drive time, ignoring how rare the day is
 python -m fl_surf_check --zip 32118 --minutes-per-sd 0
 ```
+
+---
+
+## Web UI
+
+A local browser front end for the same pipeline — no separate scoring logic,
+`webapp.py` calls straight through `cli.gather()` / `cli.filter_and_sort()` /
+`cli.compute_verdict()`, so the web table and a terminal run can never disagree.
+
+```bash
+python -m fl_surf_check.webapp
+```
+
+Then open `http://127.0.0.1:5000`, enter a zip code, and adjust days ahead,
+how many spots to show, the σ exchange rate, or the worth-only / rare-only /
+skip-tides / skip-history checkboxes. Every setting is a query parameter, so
+a specific view (`?zip=33613&days=5&worth_only=on`) is bookmarkable.
+
+It covers the everyday flags. The legacy blend (`--decay-miles`,
+`--surf-weight`), the raw per-factor breakdown (`--details`), hard cutoffs
+(`--max-miles`, `--min-score`), and surf-log tuning (`--itch-rate`,
+`--novelty-weight`, `--surfed`) stay CLI-only for now.
+
+Runs Flask's built-in dev server, bound to localhost — fine for personal use,
+not meant to be exposed to the internet.
 
 ---
 
@@ -752,13 +778,17 @@ fl_surf_check/
 ├── climatology.py  # Full-record statewide swell baseline, pooled and cached on disk
 ├── surflog.py      # Your session log; feeds the itch and novelty factors
 ├── scoring.py      # All the scoring math (pure functions, no I/O)
-└── cli.py          # argparse, orchestration, table rendering
+├── cli.py          # argparse, orchestration, table rendering
+├── webapp.py       # Flask UI - calls straight through cli.py, no separate logic
+└── templates/
+    └── index.html  # The one page the web UI renders
 
 tests/
 ├── test_scoring.py       # 32 tests on the scoring math
 ├── test_climatology.py   # 70 tests on baselines, rarity, value, storms, daylight
 ├── test_surflog.py       # 36 tests on the surf log, itch and novelty
-└── test_cli_offline.py   # 23 end-to-end tests with the network mocked
+├── test_cli_offline.py   # 23 end-to-end tests with the network mocked
+└── test_webapp.py        # 7 tests on the web UI, same network mocks
 ```
 
 `scoring.py` contains no I/O at all, which is why it's the easiest part to test
@@ -774,10 +804,10 @@ python -m pytest tests/ -q
 ```
 
 ```
-161 passed in 3.54s
+168 passed in 1.93s
 ```
 
-All 161 tests run **offline** — network calls are mocked and `build_baseline`
+All 168 tests run **offline** — network calls are mocked and `build_baseline`
 takes an injectable client — so the suite is fast and works in CI. They cover
 the scoring curves (monotonicity, bounds, continuity, Florida-specific tuning),
 the distance decay math, the worth-the-drive blend (including that an epic far
@@ -796,6 +826,12 @@ invalidation. Two are regression tests for bugs the live run surfaced:
   actually be produced. The first thresholds were fixed percentiles (≥93, ≥97)
   while shrinkage capped the attainable value near p91 — making the top two
   labels dead code.
+
+`test_webapp.py` exercises the Flask routes through Flask's own test client,
+using the same mocks as the CLI suite, and includes one test that runs both
+`cli.gather()` directly and a request through the web client on identical
+input and asserts the verdict text matches — a regression guard against the
+web table quietly drifting from what the terminal reports.
 
 ---
 
