@@ -163,7 +163,7 @@ A local browser front end for the same pipeline — no separate scoring logic,
 python -m fl_surf_check.webapp
 ```
 
-Then open `http://127.0.0.1:5000`, enter a zip code, and adjust days ahead,
+Then open `http://127.0.0.1:5050`, enter a zip code, and adjust days ahead,
 how many spots to show, the σ exchange rate, or the worth-only / rare-only /
 skip-tides / skip-history checkboxes. Every setting is a query parameter, so
 a specific view (`?zip=33613&days=5&worth_only=on`) is bookmarkable.
@@ -174,7 +174,12 @@ It covers the everyday flags. The legacy blend (`--decay-miles`,
 `--novelty-weight`, `--surfed`) stay CLI-only for now.
 
 Runs Flask's built-in dev server, bound to localhost — fine for personal use,
-not meant to be exposed to the internet.
+not meant to be exposed to the internet. Port 5050, not Flask's usual 5000:
+macOS's AirPlay Receiver listens on 5000 by default and silently steals it.
+
+**macOS:** double-click `Surf Check.command` on the Desktop to start the
+server and open the browser in one step. Closing that Terminal window stops
+the server.
 
 ---
 

@@ -117,8 +117,14 @@ def index():
     return render_template("index.html", **context)
 
 
+# Not 5000: macOS's AirPlay Receiver listens there by default (System
+# Settings > General > AirDrop & Handoff), which silently steals the port
+# from Flask's dev server rather than erroring cleanly.
+DEFAULT_PORT = 5050
+
+
 def main():
-    app.run(debug=True)
+    app.run(debug=True, port=DEFAULT_PORT)
 
 
 if __name__ == "__main__":
