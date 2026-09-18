@@ -527,30 +527,50 @@ def render(rows, origin, args, meta=None) -> str:
     return "\n".join(lines)
 
 
-def _handle_surfed(args) -> int:
-    """Record a session from --surfed and report the resulting log state."""
+class SurfLogError(Exception):
+    """A user-facing validation error when recording a session."""
+
+
+def record_surfed(spot_query: str, on: str | None = None, log_path: str | None = None):
+    """
+    Validate and record a surf session - the logic behind --surfed.
+
+    Shared by the CLI and the web UI so a spot-matching or date rule can't
+    drift between the two: one validation path, not two copies of it.
+
+    Returns (matched_spot_name, date, log). Raises SurfLogError, with a
+    message meant to be shown to the user as-is, on bad input.
+    """
     import datetime as _dt
 
     names = [s.name for s in SPOTS]
-    matched = resolve_spot_name(args.surfed, names)
+    matched = resolve_spot_name(spot_query, names)
     if matched is None:
-        print(f"error: no spot matches {args.surfed!r}.", file=sys.stderr)
-        print("       Try a distinctive word - 'apollo', 'sebastian', 'clearwater'.",
-              file=sys.stderr)
-        return 2
+        raise SurfLogError(
+            f"no spot matches {spot_query!r}. Try a distinctive word - "
+            "'apollo', 'sebastian', 'clearwater'.")
 
     when = _dt.date.today()
-    if args.on:
+    if on:
         try:
-            when = _dt.date.fromisoformat(args.on)
+            when = _dt.date.fromisoformat(on)
         except ValueError:
-            print(f"error: --on must be YYYY-MM-DD, got {args.on!r}", file=sys.stderr)
-            return 2
+            raise SurfLogError(f"Date must be YYYY-MM-DD, got {on!r}")
         if when > _dt.date.today():
-            print(f"error: {when} is in the future", file=sys.stderr)
-            return 2
+            raise SurfLogError(f"{when} is in the future")
 
-    log = record_session(matched, on=when, path=args.log_path)
+    log = record_session(matched, on=when, path=log_path)
+    return matched, when, log
+
+
+def _handle_surfed(args) -> int:
+    """Record a session from --surfed and report the resulting log state."""
+    try:
+        matched, when, log = record_surfed(args.surfed, args.on, args.log_path)
+    except SurfLogError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
     visits = log.visit_counts([matched])[matched]
     print(f"  logged: {matched} on {when:%a %d %b %Y}")
     print(f"  that's {visits} session{'s' if visits != 1 else ''} there, "

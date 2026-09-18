@@ -129,3 +129,48 @@ def test_verdict_matches_the_cli_render(offline, client, capsys):
     rows = cli.filter_and_sort(rows, args)
     expected_verdict = cli.compute_verdict(rows[0])
     assert expected_verdict.encode() in web_resp.data
+
+
+# --- /surfed -----------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _sandboxed_log(tmp_path, monkeypatch):
+    """Every test in this file gets its own log file, never the real one."""
+    monkeypatch.setenv("FL_SURF_LOG", str(tmp_path / "log.json"))
+
+
+def test_surfed_logs_a_session_and_redirects_back(client):
+    resp = client.post("/surfed", data={
+        "spot": "apollo", "return_qs": "zip=32118&days=1",
+    })
+    assert resp.status_code == 302
+    assert resp.headers["Location"].startswith("/?zip=32118&days=1&logged=")
+    assert "Apollo+Beach" in resp.headers["Location"]
+
+
+def test_surfed_shows_a_confirmation_banner(client):
+    client.post("/surfed", data={"spot": "apollo", "return_qs": ""})
+    resp = client.get("/?logged=Apollo+Beach+%28Canaveral+NS%29")
+    assert b"Logged a session at" in resp.data
+    assert b"Apollo Beach" in resp.data
+
+
+def test_surfed_rejects_an_unmatchable_spot(client):
+    resp = client.post("/surfed", data={"spot": "zzzz nowhere", "return_qs": ""})
+    assert resp.status_code == 302
+    assert "log_error=" in resp.headers["Location"]
+    follow = client.get(resp.headers["Location"])
+    assert b"no spot matches" in follow.data
+
+
+def test_surfed_rejects_a_blank_spot(client):
+    resp = client.post("/surfed", data={"spot": "", "return_qs": ""})
+    follow = client.get(resp.headers["Location"])
+    assert b"Enter a spot name" in follow.data
+
+
+def test_surfed_actually_writes_the_log(client, tmp_path):
+    client.post("/surfed", data={"spot": "apollo", "return_qs": ""})
+    from fl_surf_check.surflog import load_log
+    log = load_log()
+    assert log.total_sessions() == 1

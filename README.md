@@ -168,10 +168,12 @@ how many spots to show, the σ exchange rate, or the worth-only / rare-only /
 skip-tides / skip-history checkboxes. Every setting is a query parameter, so
 a specific view (`?zip=33613&days=5&worth_only=on`) is bookmarkable.
 
-It covers the everyday flags. The legacy blend (`--decay-miles`,
-`--surf-weight`), the raw per-factor breakdown (`--details`), hard cutoffs
-(`--max-miles`, `--min-score`), and surf-log tuning (`--itch-rate`,
-`--novelty-weight`, `--surfed`) stay CLI-only for now.
+It covers the everyday flags, plus logging a session — a "Log a session" field
+next to the filters posts to `cli.record_surfed()`, the same validation
+`--surfed` uses, and redirects back to whatever view was open. The legacy
+blend (`--decay-miles`, `--surf-weight`), the raw per-factor breakdown
+(`--details`), hard cutoffs (`--max-miles`, `--min-score`), and the itch/novelty
+*rate* tuning (`--itch-rate`, `--novelty-weight`) stay CLI-only for now.
 
 Runs Flask's built-in dev server, bound to localhost — fine for personal use,
 not meant to be exposed to the internet. Port 5050, not Flask's usual 5000:
@@ -793,7 +795,7 @@ tests/
 ├── test_climatology.py   # 70 tests on baselines, rarity, value, storms, daylight
 ├── test_surflog.py       # 36 tests on the surf log, itch and novelty
 ├── test_cli_offline.py   # 23 end-to-end tests with the network mocked
-└── test_webapp.py        # 7 tests on the web UI, same network mocks
+└── test_webapp.py        # 12 tests on the web UI, same network mocks
 ```
 
 `scoring.py` contains no I/O at all, which is why it's the easiest part to test
@@ -809,10 +811,10 @@ python -m pytest tests/ -q
 ```
 
 ```
-168 passed in 1.93s
+173 passed in 1.91s
 ```
 
-All 168 tests run **offline** — network calls are mocked and `build_baseline`
+All 173 tests run **offline** — network calls are mocked and `build_baseline`
 takes an injectable client — so the suite is fast and works in CI. They cover
 the scoring curves (monotonicity, bounds, continuity, Florida-specific tuning),
 the distance decay math, the worth-the-drive blend (including that an epic far

@@ -18,6 +18,7 @@
     --bad: #a13d3d;
     --storm: #7a1f1f;
     --storm-bg: #fbe9e9;
+    --good-bg: #e8f5ef;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -33,6 +34,7 @@
       --bad: #e07070;
       --storm: #ffb4b4;
       --storm-bg: #3a1414;
+      --good-bg: #123529;
     }
   }
   * { box-sizing: border-box; }
@@ -112,7 +114,29 @@
     cursor: pointer;
   }
   button:hover { opacity: 0.9; }
+  button.secondary {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--border);
+  }
 
+  .log-form {
+    margin-top: 10px;
+    padding: 14px 20px;
+    gap: 10px 16px;
+  }
+  .log-form input[type="text"], .log-form input[type="date"] {
+    width: 14em;
+  }
+
+  .confirm {
+    margin-top: 18px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: var(--good-bg);
+    color: var(--good);
+    font-size: 14px;
+  }
   .error {
     margin-top: 18px;
     padding: 12px 16px;
@@ -230,6 +254,26 @@
     </div>
     <button type="submit">Check surf</button>
   </form>
+
+  <form method="post" action="{{ url_for('surfed') }}" class="log-form">
+    <input type="hidden" name="return_qs" value="{{ request.query_string.decode() }}">
+    <div class="field">
+      <label for="spot">Log a session</label>
+      <input id="spot" type="text" name="spot" placeholder="e.g. apollo" required>
+    </div>
+    <div class="field">
+      <label for="on">Date</label>
+      <input id="on" type="date" name="on">
+    </div>
+    <button type="submit" class="secondary">Log it</button>
+  </form>
+
+  {% if logged %}
+    <div class="confirm">Logged a session at <strong>{{ logged }}</strong>.</div>
+  {% endif %}
+  {% if log_error %}
+    <div class="error">{{ log_error }}</div>
+  {% endif %}
 
   {% if error %}
     <div class="error">{{ error }}</div>

@@ -3,7 +3,7 @@ Local web UI for fl-surf-check.
 
 Run with:
     python -m fl_surf_check.webapp
-then open http://127.0.0.1:5000
+then open http://127.0.0.1:5050
 
 This is a thin wrapper around the exact same pipeline the CLI uses
 (build_parser -> geocode_zip -> gather -> filter_and_sort -> compute_verdict),
@@ -14,7 +14,9 @@ ranking or verdict logic that could quietly drift from the terminal output.
 
 from __future__ import annotations
 
-from flask import Flask, render_template, request
+from urllib.parse import parse_qsl, urlencode
+
+from flask import Flask, redirect, render_template, request, url_for
 
 from . import cli
 from .location import GeocodeError
@@ -79,8 +81,12 @@ def index():
     form = {**FORM_DEFAULTS, **request.args}
     zip_code = form["zip"].strip()
 
-    context = {"form": form, "rows": None, "error": None, "origin": None,
-               "n_spots": len(SPOTS), "meta": None}
+    context = {
+        "form": form, "rows": None, "error": None, "origin": None,
+        "n_spots": len(SPOTS), "meta": None,
+        "logged": request.args.get("logged"),
+        "log_error": request.args.get("log_error"),
+    }
 
     if not zip_code:
         return render_template("index.html", **context)
@@ -115,6 +121,31 @@ def index():
         storms=[r["spot"].name for r in rows if r["storm"] == "active"],
     )
     return render_template("index.html", **context)
+
+
+@app.route("/surfed", methods=["POST"])
+def surfed():
+    """
+    Record a session via cli.record_surfed - the same validation the
+    --surfed CLI flag uses - then bounce back to whatever view was open,
+    with a query param carrying the result so it survives the redirect.
+    """
+    params = dict(parse_qsl(request.form.get("return_qs", "")))
+    params.pop("logged", None)
+    params.pop("log_error", None)
+    spot_query = request.form.get("spot", "").strip()
+    on = request.form.get("on", "").strip() or None
+
+    if not spot_query:
+        params["log_error"] = "Enter a spot name."
+    else:
+        try:
+            matched, _when, _log = cli.record_surfed(spot_query, on)
+            params["logged"] = matched
+        except cli.SurfLogError as exc:
+            params["log_error"] = str(exc)
+
+    return redirect(f"{url_for('index')}?{urlencode(params)}")
 
 
 # Not 5000: macOS's AirPlay Receiver listens there by default (System
